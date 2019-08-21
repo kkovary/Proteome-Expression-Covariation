@@ -1,0 +1,126 @@
+---
+title: "Single Cell Xenopus TMT Analysis: Modeling"
+author: "Kyle Kovary"
+date: "5/15/2019"
+output: html_document
+---
+
+## Complex Stoichiometry
+Could be that when drawing from a correlated distribution, the variance between cells will be the same, but the variance within a cell will be much less... High correlation increases variance between cells but reduces variance within a cell for a given pathway. Need to test that high variance with high covariance matters for a single cell, could be that correlation is all that matters, which would invalidate the reasoning that for certain pathways there is a tradeoff between variance and correlation.
+```{r}
+correlatedValue = function(x, r){
+  r2 = r**2
+  ve = 1-r2
+  SD = sqrt(ve)
+  e  = rnorm(length(x), mean=0, sd=SD)
+  y  = r*x + e
+  return(y)
+}
+
+#set.seed(5)
+n = 1000
+x = rnorm(n)
+y = correlatedValue(x=x, r=.6)
+
+# multiply the variable by the SD you want and then add the mean you want
+
+corMat <- function(nRow = 1000, nCol = 10, R = 0.5, mean = 1000, sd = 30){
+  mat <- matrix(data = rnorm(nRow), nrow = nRow)
+  
+  for(i in 1:(nCol) - 1){
+    mat <- cbind(mat, correlatedValue(x = mat[,i], r = R))
+  }
+  
+  return((mat*sd) + mean)
+}
+
+
+```
+
+```{r}
+library(mvtnorm)
+
+fun = function(cor_matrix, list_distributions, L)
+{
+    n = length(list_distributions)
+    # Correlated Gaussian variables
+    Gauss = rmvnorm(n=L, mean = rep(0,n), sig=cor_matrix)
+    # convert them to uniform distribution.
+    Unif = pnorm(Gauss) 
+    # Convert them to whatever I want
+    vars = sapply(1:n, FUN = function(i) list_distributions[[i]](Unif[,i]))
+    return(vars)
+}
+
+# Create a matrix of values with a given R, mean, and standard deviation
+corProts <- function(nProt, nCell, R, mean, sd) {
+  
+  cor_matrix =  matrix(data = R,
+                       ncol = nProt,
+                       nrow = nProt)
+  for (i in 1:nProt) {
+    cor_matrix[i, i] = 1
+  }
+  
+  list_distributions <- list()
+  for (i in 1:nProt) {
+    list_distributions <-
+      c(list_distributions, function(nCell)
+        round(qnorm(nCell, mean, sd)))
+  }
+  
+  mat = fun(cor_matrix, list_distributions, nCell)
+  return(mat)
+}
+
+# Plot of total variance of 10 subunit complex
+
+# Plot of max number of complete complexes
+cors <- seq(0,1,0.02)
+vars <- rev(seq(0,1,0.02))
+
+corVarMat <- matrix(data = NA, ncol = length(cors), nrow = length(vars))
+colnames(corVarMat) <- cors
+rownames(corVarMat) <- vars
+
+# Percent of potentially complete complexes
+for(i in 1:length(cors)){
+  for(j in 1:length(vars)){
+    perc <- corProts(nProt = 10, nCell = 10000, R = cors[i], mean = 1000, sd = 1000*vars[j])
+    perc <- mean(apply(perc, 1, function(x) min(abs(x)) / max(abs(x))), na.rm = T)
+    corVarMat[j,i] <- perc
+  }
+}
+pheatmap(corVarMat, cluster_cols = F, cluster_rows = F)
+rotate <- function(x) t(apply(x, 2, rev))
+pheatmap(rotate(corVarMat), cluster_cols = F, cluster_rows = F)
+plot(diag(rotate(corVarMat)), rotate(corVarMat)[])
+
+x <- tibble(index = 1:51,
+            diagnal = diag(corVarMat), 
+            zeroCor = corVarMat[,1],
+            fullCor = corVarMat[1,])
+x %>% gather(key = slice, value = percent, 2:4) %>% 
+  ggplot(., aes(x = index, y = percent, colour = slice)) + 
+  geom_point() + geom_vline(xintercept = 40, linetype = 'dashed')
+
+x <- as_tibble(cbind(vars, corVarMat))
+x <- x %>% gather(key = R, value = percent, 2:ncol(x)) %>% mutate(R = as.numeric(R)) %>%
+  rename_(CV = vars)
+ggplot(x, aes(x = CV, y = percent, colour = R, group = as.factor(R))) + geom_path() + scale_x_reverse() + theme_bw()
+
+ggplot(x, aes(x = CV, y = percent, colour = as.factor(R))) + geom_path() + scale_x_reverse(limits = c(0.2,0)) + theme_bw()
+
+
+# Within cell variance
+for(i in 1:length(cors)){
+  for(j in 1:length(vars)){
+    stdev <- corProts(nProt = 10, nCell = 10000, R = cors[i], mean = 1000, sd = 1000*vars[j])
+    stdev <- median(apply(stdev, 1, function(x) sd(x, na.rm = T) / mean(x, na.rm = T)), na.rm = T)
+    corVarMat[j,i] <- stdev
+  }
+}
+
+
+```
+

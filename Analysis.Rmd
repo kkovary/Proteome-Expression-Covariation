@@ -1,0 +1,507 @@
+---
+title: "Single Cell Xenopus TMT Analysis"
+author: "Kyle Kovary"
+date: "5/15/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(RColorBrewer)
+library(pheatmap)
+library(GGally)
+library(VIM)
+library(org.Xl.eg.db)
+library(GO.db)
+library(ggrepel)
+
+# Import Data
+files = list.files('TMTdata/', pattern = 'TargetPeptideSpectrumMatch', full.names = T)
+
+for(i in seq_along(files)){
+  if(i == 1){
+    rm(pepRaw)
+  }
+  if(!exists('pepRaw')){
+    pepRaw = read_tsv(file = files[i]) %>% mutate(file = files[i], massID = 1:nrow(.))
+  } else{
+    temp = read_tsv(file = files[i]) %>% mutate(file = files[i], massID = 1:nrow(.))
+    colnames(temp) = colnames(pepRaw)
+    pepRaw = rbind(pepRaw, temp)
+    rm(temp)
+  }
+}
+pepRaw = pepRaw %>% dplyr::select(file, massID, everything()) %>% filter(!is.na(`126`), 
+                                                                  `Quan Usage` == 'Use',
+                                                                  Confidence != 'Low')
+
+```
+
+## Data Organization
+
+
+```{r }
+pepRaw = pepRaw %>% 
+  mutate(run = c('ctrl','a','b','c','d','e')[match(pepRaw$file, files)]) %>% 
+  group_by(file, `Annotated Sequence`) %>% 
+  mutate(pepID = letters[1:n()]) %>% ungroup() %>%
+  dplyr::select(file, run, pepID, everything())
+
+pepTidy = pepRaw %>% 
+  gather(key = label, value = intensity, '126':'131') %>% 
+  dplyr::select(run, label, intensity, everything(), -file) %>% 
+  mutate(condition = ifelse(run == 'ctrl', 'ctrl',c('ctrl',0,20,40,60,80)[match(label,c(126:131))]),
+         intensity = as.numeric(intensity)) %>% unite(peptide, c(`Annotated Sequence`,'pepID')) %>%
+  dplyr::rename(Uniprot = `Master Protein Accessions`) %>% 
+  unite(cell, c('run','label','condition'), remove = F) %>%
+  dplyr::select(cell, run, label, condition, peptide, Uniprot, intensity)
+```
+
+## Variance and Co-variance Between Cells Before Normalization
+
+
+```{r echo=TRUE, fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
+ggplot(pepTidy, aes(log2(intensity), colour = cell)) + geom_density() + theme_bw() + xlim(-20,20)
+```
+
+The peptide intensities appear to follow a log-normal distribution.
+
+```{r echo=TRUE, fig.height=10, fig.width=10,message=FALSE, warning=FALSE}
+pairs = pepTidy %>% filter(condition == 'ctrl') %>% 
+  dplyr::select(cell, peptide, intensity) %>% spread(cell, intensity)
+
+ggpairs(log2(pairs[,2:ncol(pairs)]), lower = list(continuous = wrap("points", alpha = 0.1, size = 0.1))) + theme_bw()
+```
+
+```{r echo=TRUE, fig.height=10, fig.width=10,message=FALSE, warning=FALSE}
+meanSD = pepTidy %>% filter(condition != 'ctrl') %>% 
+  group_by(peptide) %>% 
+  summarise(mean = mean(intensity, na.rm = T), 
+            sd = sd(intensity, na.rm = T) / mean)
+
+ggplot(meanSD, aes(x = log10(mean), y = sd)) + geom_point() + geom_smooth(method = lm, formula = y ~ poly(x, 2))
+```
+
+
+## Variance and Co-variance Between Cells After Cell Normalization
+
+```{r echo=TRUE, fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
+pepTidy = pepTidy %>% group_by(cell) %>% mutate(intensity = intensity / median(intensity, na.rm = T))
+
+ggplot(pepTidy, aes(log2(intensity), colour = cell)) + geom_density() + theme_bw() + xlim(-8,8)
+```
+
+```{r echo=TRUE, fig.height=10, fig.width=10,message=FALSE, warning=FALSE}
+pairs = pepTidy %>% filter(condition == 'ctrl') %>% 
+  dplyr::select(cell, peptide, intensity) %>% spread(cell, intensity)
+
+ggpairs(log2(pairs[,2:ncol(pairs)]), lower = list(continuous = wrap("points", alpha = 0.1, size = 0.1))) + theme_bw()
+```
+
+
+## Variance and Co-variance Between Cells After Peptide Batch Normalization
+
+```{r echo=TRUE, fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
+pepTidy = pepTidy %>% group_by(run, peptide) %>% 
+  mutate(intensity = intensity / median(intensity, na.rm = T)) %>% ungroup()
+ 
+ggplot(pepTidy, aes(log2(intensity), colour = cell)) + geom_density() + theme_bw() + xlim(-8,8)
+```
+
+```{r echo=TRUE, fig.height=10, fig.width=10,message=FALSE, warning=FALSE}
+pairs = pepTidy %>% dplyr::filter(condition == 'ctrl') %>% 
+  dplyr::select(cell, peptide, intensity) %>% spread(cell, intensity)
+ 
+ggpairs(log2(pairs[,2:ncol(pairs)]), lower = list(continuous = wrap("points", alpha = 0.1, size = 0.1))) + theme_bw()
+```
+
+
+There are 
+
+## Variance and Co-variance Between Cells After Removing Peptides Outside of 2*sd
+
+```{r echo=TRUE, fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
+pepTidy %>% dplyr::filter(abs(log2(intensity)) < 2*sd(log2(pepTidy$intensity), na.rm = T))
+
+ggplot(pepTidy, aes(log2(intensity), colour = cell)) + geom_density() + theme_bw() + xlim(-4,4)
+```
+
+The standard deviation of all peptides across eggs was calculated, and every peptide that had a value outside of `r 2*sd(log2(pepTidy$intensity), na.rm = T)`
+
+## Group into proteins based on median
+
+```{r echo=TRUE, fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
+protTidy = pepTidy %>% filter(abs(log2(intensity)) < 2*sd(log2(pepTidy$intensity), na.rm = T)) %>% group_by(cell, run, label, condition, Uniprot) %>% 
+  summarise(abundance = median(intensity, na.rm = T)) %>% ungroup()
+
+pairs = protTidy %>% dplyr::filter(condition == 'ctrl') %>% 
+  dplyr::select(cell, Uniprot, abundance) %>% 
+  spread(cell, abundance)
+
+ggpairs(log2(pairs[,2:ncol(pairs)]), lower = list(continuous = wrap("points", alpha = 0.1, size = 0.1))) + theme_bw()
+
+pairs = protTidy %>% dplyr::select(cell, Uniprot, abundance) %>% spread(cell, abundance)
+
+protImpute = kNN(data = pairs, k = 1) %>% as_tibble() %>% dplyr::select(Uniprot:e_131_80)
+
+cor = cor(t(log2(protImpute[c(1:ncol(protImpute))[-c(1,grep('ctrl',colnames(protImpute)))]])), use = 'pairwise.complete.obs')
+colnames(cor) = protImpute$Uniprot
+rownames(cor) = protImpute$Uniprot
+
+mypal = rev(colorRampPalette(brewer.pal(11, 'RdBu'))(201))
+k = NA
+map = pheatmap(cor, show_colnames = F, show_rownames = F, color = mypal, breaks = seq(-1,1, by = 0.01), cutree_cols = k, cutree_rows = k, legend = F)
+map
+tibble(Uniprot = protImpute$Uniprot, Cluster = cutree(map$tree_row, k = k)) %>% write_csv('/Users/kylekovary/Downloads/Map.csv')
+
+remove = which(is.na(pairs), arr.ind = T)[,1] %>% unique()
+pca = prcomp(protImpute[,2:ncol(protImpute)])
+
+pcaDF = tibble(cell = rownames(pca$rotation), PC1 = pca$rotation[,1], PC2 = pca$rotation[,2])
+pcaDF = pcaDF %>% separate(cell, into = c('run','label','condition'), remove = F) %>% print()
+ggplot(pcaDF, aes(x = PC1, y = PC2, colour = condition)) + geom_point(size = 5)
+
+```
+
+## Map GO Terms to Proteins
+
+```{r eval=F}
+columns(org.Xl.eg.db)
+mapIds(org.Xl.eg.db, keys = 'A0JPG5', keytype = 'UNIPROT', column = 'GOALL', multiVals = 'list')
+
+keys <- keys(org.Xl.eg.db, keytype = 'UNIPROT')
+
+GO <- protImpute %>% dplyr::select(Uniprot) %>% filter(Uniprot %in% keys) %>% 
+  rowwise() %>% 
+  mutate(GO = mapIds(org.Xl.eg.db, 
+                     keys = Uniprot, 
+                     keytype = 'UNIPROT', 
+                     column = 'GOALL', 
+                     multiVals = 'list')) %>% 
+  ungroup()
+
+allGO <- tibble(GOterms = unlist(GO$GO) %>% unique())
+allGO <- allGO %>% group_by(GOterms) %>% mutate(Uniprot = GO[grep(GOterms, GO$GO),1] %>% as.list()) %>% ungroup()
+
+write_csv(mutate(GO, GO = paste(unlist(GO), sep = '', collapse = ',')), '/Users/kylekovary/Documents/GitHub/Proteome-Expression-Covariation/analysisData/GO.csv')
+
+write_csv(mutate(allGO, Uniprot = paste(unlist(Uniprot), sep = '', collapse = ',')), '/Users/kylekovary/Documents/GitHub/Proteome-Expression-Covariation/analysisData/allGO.csv')
+
+
+```
+
+## GO Term Analysis
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+GO <- read_csv('/Users/kylekovary/Documents/GitHub/Proteome-Expression-Covariation/analysisData/GO.csv') %>% mutate(GO = strsplit(GO, split = ','))
+
+allGO <- read_csv('/Users/kylekovary/Documents/GitHub/Proteome-Expression-Covariation/analysisData/allGO.csv') %>% 
+  mutate(Uniprot = strsplit(Uniprot, split = ','),
+         GO = mapIds(GO.db, 
+                     keys = GOterms, 
+                     keytype = 'GOID', 
+                     column = 'TERM') %>% as.character(),
+         ontology = mapIds(GO.db, 
+                     keys = GOterms, 
+                     keytype = 'GOID', 
+                     column = 'ONTOLOGY') %>% as.character()) %>%
+  dplyr::select(GOterms, GO, ontology, everything())
+
+
+
+corVector <- function(uniprotList, corMat){
+  targets = uniprotList %>% unlist()
+  temp = corMat[rownames(corMat) %in% targets,colnames(corMat) %in% targets]
+  temp[lower.tri(temp, diag = F)]
+}
+
+allGO <- allGO %>% group_by(GOterms) %>% dplyr::mutate(cors = corVector(Uniprot, cor) %>% as_tibble() %>% as.list()) %>% ungroup()
+
+x <- allGO %>% rowwise %>% mutate(size = length(Uniprot)) %>% dplyr::select(GOterms, size, cors) %>% unnest() %>% group_by(GOterms) %>% 
+  summarise(median = median(cors, na.rm = T),
+            sd = sd(cors, na.rm = T),
+            size = mean(size)) %>% 
+  mutate(GOterms = fct_reorder(GOterms, median))
+
+ggplot(filter(x, size >= 2), aes(x = GOterms, y = median)) + geom_point(alpha = 0.25) +
+  geom_hline(yintercept = 0.02154303, colour = 'red', linetype = 'dashed') + 
+  theme_bw() + ylab('Mean Correlation') + ylim(-1,1)
+
+```
+
+## Plot highest correlated GO Terms with GO Term Names
+```{r}
+topGOnames <- x %>% filter(size > 2) %>% .[order(.$median, decreasing = T),] %>% 
+  .[1:50,'GOterms'] %>% unlist()
+
+topGO <- allGO %>% filter(GOterms %in% topGOnames) %>% 
+  dplyr::select(GOterms, GO, cors) %>% unnest() %>%
+  group_by(GO) %>% mutate(median = median(cors)) %>% ungroup() %>%
+  mutate(GO = fct_reorder(GO, median))
+
+
+ggplot(topGO, aes(x = GO, y = cors)) + geom_boxplot() + geom_jitter(alpha = 0.5, size = 0.5) + coord_flip() + scale_x_discrete(labels = function(x) str_wrap(x, width = 50)) + theme_bw() + ylim(-1,1)
+
+
+mitoProts <- allGO %>% filter(GOterms == 'GO:0051321') %>% dplyr::select(Uniprot) %>% unnest() %>% unlist()
+mitoDF <- protTidy %>% filter(condition != 'ctrl', Uniprot %in% mitoProts) %>% group_by(condition, Uniprot) %>% summarise(mean = mean(abundance), sd = sd(abundance) / (n()-1))
+
+ggplot(mitoDF, aes(x = as.numeric(condition), y = mean, colour = Uniprot)) + geom_point() + geom_path() + geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0, alpha = 0.5) + theme_bw()
+
+```
+
+## Variance of GO Terms
+```{r}
+
+protVar <- protImpute %>% gather(key = 'cell', value = 'abundance', 2:ncol(protImpute)) %>%
+  separate(cell, into = c('run','label','condition'), remove = F) %>% 
+  filter(condition != 'ctrl') %>% group_by(Uniprot) %>%
+  summarise(cv = sd(abundance)/mean(abundance))
+
+ggplot(protVar, aes(x = cv)) + geom_histogram(bins = 50) + theme_bw()
+
+
+selectCV <- function(x){
+  protVar %>% filter(Uniprot %in% unlist(x)) %>% 
+    dplyr::select(cv) %>% as_tibble() %>% as.list()
+}
+
+allGO <- allGO %>% group_by(GOterms) %>% 
+  dplyr::mutate(cv = selectCV(Uniprot)) %>% ungroup()
+
+meanCV = allGO %>% dplyr::select(GOterms, cv) %>% unnest() %>% group_by(GOterms) %>% 
+  summarise(mean = mean(cv), size = n()) %>% mutate(GOterms = fct_reorder(GOterms, mean))
+
+ggplot(meanCV, aes(x = GOterms, y = mean, size = log2(size), alpha = 0.2)) + 
+  geom_point() + theme_bw()
+
+
+topGOnames <- meanCV %>% filter(size > 2) %>% .[order(.$mean, decreasing = F),] %>% 
+  .[1:40,'GOterms'] %>% unlist()
+
+topGO <- unnest(dplyr::select(filter(allGO, GOterms %in% topGOnames), GOterms, cv)) %>%
+  mutate(GO = mapIds(GO.db, keys = GOterms, keytype = 'GOID', column = 'TERM')) %>%
+  group_by(GO) %>% mutate(median = median(cv)) %>% ungroup() %>%
+  mutate(GO = fct_reorder(GO, median))
+
+
+ggplot(topGO, aes(x = GO, y = cv)) + geom_boxplot(outlier.size = 1) + geom_point() + coord_flip() + scale_x_discrete(labels = function(x) str_wrap(x, width = 50)) + theme_bw() + ylim(0,0.3)
+```
+
+```{r message=FALSE, warning=FALSE}
+allGO[grep('ribosom',allGO$GO),]
+glyc <- filter(allGO, GOterms == 'GO:0005840')$Uniprot %>% unlist()
+
+glycMat <- cor[rownames(cor) %in% glyc,colnames(cor) %in% glyc]
+rownames(glycMat) <- mapIds(org.Xl.eg.db, keys = rownames(glycMat), keytype = 'UNIPROT', column = 'SYMBOL')
+pheatmap(glycMat, show_colnames = T, show_rownames = T, color = mypal, breaks = seq(-1,1, by = 0.01),
+         cutree_cols = 3, cutree_rows = 3)
+
+glyc <- protImpute %>% filter(Uniprot %in% glyc) %>% 
+  mutate(symbol = mapIds(org.Xl.eg.db, keys = Uniprot, keytype = 'UNIPROT', column = 'SYMBOL')) %>%
+  dplyr::select(Uniprot, symbol, everything())
+
+glyc <- glyc %>% gather(key = sample, value = abundance, 3:ncol(glyc)) %>%
+  dplyr::select(sample, symbol, abundance) %>% spread(key = symbol, value = abundance)
+
+ggpairs(log2(glyc[,2:ncol(glyc),]))
+```
+
+## Cor vs CV
+```{r}
+test = allGO %>% rowwise() %>% mutate(n = length(Uniprot), medCors = mean(cors), medCV = mean(cv)) %>%
+  filter(length(Uniprot) > 3, !is.na(medCors), !is.na(medCV))
+
+ggplot(test, aes(x = medCors, y = medCV)) + geom_point(alpha = 0.5) + theme_bw()
+
+ggplot(test, aes(x = medCors, y = medCV)) + 
+  geom_point(alpha = 0.5) + 
+  #stat_smooth(method="lm",formula=  y ~ I(1/x)) +
+  geom_text_repel(data = filter(test, medCors > 0.15), aes(label = GO), colour = 'black', size = 3) + 
+  theme_bw()
+
+test2 = tibble(Cor = test$medCors, CV = test$medCV, mult = test$medCors * test$medCV) %>%
+  gather(key = 'Key', value = 'Value')
+ggplot(test2, aes(x = Value, colour = Key)) + geom_density() + theme_bw()
+ggplot(test2, aes(x = Key, y = Value)) + geom_boxplot() + theme_bw()
+# Variance vs sum of covariance
+# Cor vs Var relationship for every protein pair... error propagation
+```
+
+## All combinations of 5 proteins -> total error vs correlation
+```{r}
+combMat <- combn(1:length(cor))
+corVect <- tibble(protA = rep(rownames(cor), times = length(colnames(cor))), 
+                  protB = rep(colnames(cor), each = length(rownames(cor))),
+                  keep = as.vector(lower.tri(cor)),
+                  cor = as.vector(cor)) %>% filter(keep) %>% dplyr::select(-keep)
+
+corVect <- corVect %>% dplyr::rename(Uniprot = protA) %>% 
+  left_join(., protVar, 'Uniprot') %>%
+  dplyr::rename(protA = Uniprot, Uniprot = protB, cvA = cv) %>%
+  left_join(., protVar, 'Uniprot') %>% dplyr::rename(protB = Uniprot, cvB = cv) %>%
+  mutate(totVar = sqrt(cvA^2 + cvB^2))
+
+ggplot(corVect, aes(x = cor, y = totVar)) + geom_hex(bins = 250) + theme_bw() +
+  xlim(-1,1) + ylim(0,0.4) + 
+  geom_vline(xintercept = 0.7, colour = 'red', linetype = 'dashed') +
+  geom_hline(yintercept = 0.2, colour = 'red', linetype = 'dashed')
+
+ggplot(filter(corVect, totVar > 0.2, cor > 0.7), aes(x = cor, y = totVar))  + 
+  geom_point(alpha = 0.15, size = 0.1) + theme_bw() + xlim(-1,1) + ylim(0,0.4)
+```
+
+## Total Variance
+```{r}
+protImputeTidy <- protImpute %>% 
+  gather(key = 'cell', value = 'abundance', 2:ncol(protImpute)) %>%
+  separate(cell, into = c('run','label','condition'), remove = F) %>% 
+  filter(condition != 'ctrl')
+
+### Prototype function
+## Combine the apply find correlation value and pulling out the CV value
+geneList <- allGO$Uniprot[9] %>% unlist()
+protCombs <- t(combn(geneList, 2))
+
+groupVar <- function(x){
+  geneList <- unlist(x)
+  groupVars <- protVar %>% filter(Uniprot %in% geneList)
+  return(sqrt(sum(groupVars$cv^2)))
+}
+
+# Fix by including new code from totVarGroup()
+groupCor <- function(x){
+  geneList <- unlist(x)
+  
+  if (length(geneList) > 1) {
+    protCombs <- t(combn(geneList, 2))
+    return(sqrt(sum(totVarPair(protCombs))))
+  } else{
+    return(as.numeric(protVar[protVar$Uniprot == geneList[1], 2]))
+  }
+}
+
+totVarPair <- function(x){
+  A <- as.character(x[1])
+  B <- as.character(x[2])
+  varA <- as.numeric(protVar[protVar$Uniprot == A, 2])
+  varB <- as.numeric(protVar[protVar$Uniprot == B, 2])
+  corAB <- cor[A,B]
+  tot <- varA^2 + varB^2 + 2*corAB*varA*varB
+  return(tot)
+}
+
+totVarGroup <- function(x){
+  geneList <- unlist(x)
+  
+  if (length(geneList) > 1) {
+    protCombs <- t(combn(geneList, 2))
+    return(sqrt(sum(apply(protCombs, 1, function(x) totVarPair(x)))))
+    #return(sqrt(sum(totVarPair(protCombs))))
+  } else{
+    return(as.numeric(protVar[protVar$Uniprot == geneList[1], 2]))
+  }
+  
+}
+
+allGO1 <- allGO %>% filter(!is.na(GOterms)) %>% rowwise() %>% 
+  mutate(n = length(unlist(Uniprot)),
+         totVar = totVarGroup(Uniprot),
+         normVar = totVar / n) %>%
+  filter(n > 3)
+
+allGO1 %>% arrange(desc(normVar)) %>% print(n = 100)
+allGO1 %>% arrange(normVar) %>% print(n = 100)
+
+allGO1$GO <-factor(allGO1$GO, levels = allGO1$GO[order(allGO1$normVar)])
+
+ggplot(allGO1, aes(x = normVar, y = totVar)) + geom_point()
+ggplot(allGO1, aes(x = log2(n), y = log2(totVar))) + geom_point()
+ggplot(allGO1, aes(x = GO, y = normVar)) + geom_point()
+
+ggplot(allGO1, aes(x = normVar)) + geom_histogram(bins = 30) + 
+  geom_vline(xintercept = c(0.15, 0.1), colour = 'red', linetype = 'dashed') +
+  theme_bw()
+
+```
+
+### Abundance based on intensity
+Does expression level explain lower variance?
+```{r}
+
+ggplot(protRawMean, aes(x = log2(mean), y = noise)) + geom_point() + theme_bw()
+
+```
+
+It doesn't appear to be the case. This could be because these are likely the top ~1000 highest expressed proteins that have a dynamic range of ~250X.
+
+### Move up the GO branch to see how many high/low variance GO terms are from which parent branch
+```{r}
+
+```
+
+### Is lower variance compensating for high correlations? How much of a role is negative correlation playing in reducing the total variance?
+```{r}
+dat <- left_join(ungroup(test), allGO1, by = "GOterms") %>%
+  dplyr::select(GOterms, GO.x, ontology.x, Uniprot.x, cors.x, cv.x, n.x,medCors, medCV, normVar)
+
+dat$score <- 'Med'
+dat[dat$normVar > 0.145, 'score'] <- 'High'
+dat[dat$normVar < 0.115, 'score'] <- 'Low'
+
+ggplot(dat, aes(x = medCors, y = medCV, colour = score)) + geom_point() 
+ggplot(dat, aes(x = medCors, y = medCV)) + geom_point() + geom_smooth(method = 'lm') + facet_grid(~score)
+
+ggplot(filter(dat, n.x > 5), aes(x = medCors, y = medCV, colour = score)) + 
+  geom_point(alpha = 0.75) + scale_color_manual(values=c("blue", "red", "grey"))
+# + #scale_colour_gradient(low="red", high="blue") +
+#  geom_text_repel(data = filter(dat, score != 'Med'), aes(label = GOterms), colour = 'black', size = 1)
+
+ggplot(filter(dat, n.x > 5, score != 'Med', ontology.x != 'CC'), aes(x = medCors, y = medCV, colour = normVar)) + 
+  geom_point() + scale_colour_gradient(low="red", high="blue") + 
+  geom_smooth(method = 'lm') + facet_wrap(~score, scales = 'free') +
+  geom_text_repel(data = filter(dat, n.x > 5, score != 'Med'), aes(label = GO.x), colour = 'black', size = 2)
+
+plot_ly(filter(dat, n.x > 5), z = ~normVar, y = ~medCV, x = ~medCors, color = ~score, colors = c("red", "blue", "grey")) %>%
+  add_markers() %>%
+  layout(scene = list(zaxis = list(title = 'Normalized Variance'),
+                     yaxis = list(title = 'Median CV'),
+                     xaxis = list(title = 'Median Correlation')))
+
+ggplot(filter(dat, n.x > 5), aes(y = normVar, x = medCV)) + geom_point(alpha = 0.75)
+ggplot(filter(dat, n.x > 5), aes(y = normVar, x = medCors)) + geom_point(alpha = 0.75)
+
+library(GGally)
+p <- ggpairs(filter(dat, n.x > 5), columns = c('medCV', 'medCors','normVar'), 
+        ggplot2::aes(colour = score, alpha = 0.5))
+
+for(i in 1:p$nrow) {
+  for(j in 1:p$ncol){
+    p[i,j] <- p[i,j] + 
+        scale_fill_manual(values=c("blue", "red", "grey")) +
+        scale_color_manual(values=c("blue", "red", "grey"))  
+  }
+}
+p
+
+
+```
+
+## Variance within highly correlated GO terms
+```{r}
+allGO[grep('large ribo',allGO$GO),]
+hCor <- filter(allGO, GOterms == 'GO:0015934')$Uniprot %>% unlist()
+
+hCor <- protImpute %>% filter(Uniprot %in% hCor) %>% 
+  mutate(symbol = mapIds(org.Xl.eg.db, keys = Uniprot, keytype = 'UNIPROT', column = 'SYMBOL')) %>%
+  dplyr::select(Uniprot, symbol, everything())
+
+hCor <- hCor %>% gather(key = sample, value = abundance, 3:ncol(hCor)) %>%
+  dplyr::select(sample, symbol, abundance) %>% spread(key = symbol, value = abundance) %>%
+  gather(key = protein, value = abundance, 2:ncol(.))
+
+hCorSD <- hCor %>% group_by(sample) %>% summarise(sd = sd(abundance))
+
+ggplot(hCorSD, aes(x = sample, y = sd)) + geom_point() + geom_hline(yintercept = sd(hCor$abundance))
+```
+
