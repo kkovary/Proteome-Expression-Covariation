@@ -2,7 +2,7 @@
 title: "Single Cell Xenopus TMT Analysis"
 author: "Kyle Kovary"
 date: "5/15/2019"
-output: html_document
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -15,15 +15,15 @@ library(VIM)
 library(org.Xl.eg.db)
 library(GO.db)
 library(ggrepel)
+library(plotly)
 
 # Import Data
 files = list.files('TMTdata/', pattern = 'TargetPeptideSpectrumMatch', full.names = T)
 
 for(i in seq_along(files)){
-  if(i == 1){
+  if(i == 1 & exists('pepRaw')){
     rm(pepRaw)
-  }
-  if(!exists('pepRaw')){
+  } else if(!exists('pepRaw')){
     pepRaw = read_tsv(file = files[i]) %>% mutate(file = files[i], massID = 1:nrow(.))
   } else{
     temp = read_tsv(file = files[i]) %>% mutate(file = files[i], massID = 1:nrow(.))
@@ -32,7 +32,7 @@ for(i in seq_along(files)){
     rm(temp)
   }
 }
-pepRaw = pepRaw %>% dplyr::select(file, massID, everything()) %>% filter(!is.na(`126`), 
+pepRaw <- pepRaw %>% dplyr::select(file, massID, everything()) %>% filter(!is.na(`126`), 
                                                                   `Quan Usage` == 'Use',
                                                                   Confidence != 'Low')
 
@@ -150,9 +150,10 @@ colnames(cor) = protImpute$Uniprot
 rownames(cor) = protImpute$Uniprot
 
 mypal = rev(colorRampPalette(brewer.pal(11, 'RdBu'))(201))
-k = NA
+k = 2
 map = pheatmap(cor, show_colnames = F, show_rownames = F, color = mypal, breaks = seq(-1,1, by = 0.01), cutree_cols = k, cutree_rows = k, legend = F)
 map
+
 tibble(Uniprot = protImpute$Uniprot, Cluster = cutree(map$tree_row, k = k)) %>% write_csv('/Users/kylekovary/Downloads/Map.csv')
 
 remove = which(is.na(pairs), arr.ind = T)[,1] %>% unique()
@@ -168,7 +169,7 @@ ggplot(pcaDF, aes(x = PC1, y = PC2, colour = condition)) + geom_point(size = 5)
 
 ```{r eval=F}
 columns(org.Xl.eg.db)
-mapIds(org.Xl.eg.db, keys = 'A0JPG5', keytype = 'UNIPROT', column = 'GOALL', multiVals = 'list')
+#mapIds(org.Xl.eg.db, keys = 'A0JPG5', keytype = 'UNIPROT', column = 'GOALL', multiVals = 'list')
 
 keys <- keys(org.Xl.eg.db, keytype = 'UNIPROT')
 
@@ -304,7 +305,7 @@ glyc <- protImpute %>% filter(Uniprot %in% glyc) %>%
 glyc <- glyc %>% gather(key = sample, value = abundance, 3:ncol(glyc)) %>%
   dplyr::select(sample, symbol, abundance) %>% spread(key = symbol, value = abundance)
 
-ggpairs(log2(glyc[,2:ncol(glyc),]))
+#ggpairs(log2(glyc[,2:ncol(glyc),]))
 ```
 
 ## Cor vs CV
@@ -330,7 +331,7 @@ ggplot(test2, aes(x = Key, y = Value)) + geom_boxplot() + theme_bw()
 
 ## All combinations of 5 proteins -> total error vs correlation
 ```{r}
-combMat <- combn(1:length(cor))
+combMat <- combn(1:length(colnames(cor)),2)
 corVect <- tibble(protA = rep(rownames(cor), times = length(colnames(cor))), 
                   protB = rep(colnames(cor), each = length(rownames(cor))),
                   keep = as.vector(lower.tri(cor)),
@@ -488,7 +489,7 @@ p
 ```
 
 ## Variance within highly correlated GO terms
-```{r}
+```{r message=FALSE, warning=FALSE}
 allGO[grep('large ribo',allGO$GO),]
 hCor <- filter(allGO, GOterms == 'GO:0015934')$Uniprot %>% unlist()
 
@@ -503,5 +504,32 @@ hCor <- hCor %>% gather(key = sample, value = abundance, 3:ncol(hCor)) %>%
 hCorSD <- hCor %>% group_by(sample) %>% summarise(sd = sd(abundance))
 
 ggplot(hCorSD, aes(x = sample, y = sd)) + geom_point() + geom_hline(yintercept = sd(hCor$abundance))
+
+BC_delta <- function(x) {
+  hCor <- filter(allGO, GOterms == x)$Uniprot %>% unlist()
+  
+  hCor <- protImpute %>% filter(Uniprot %in% hCor) %>%
+    mutate(symbol = mapIds(
+      org.Xl.eg.db,
+      keys = Uniprot,
+      keytype = 'UNIPROT',
+      column = 'SYMBOL'
+    )) %>%
+    dplyr::select(Uniprot, symbol, everything())
+  
+  hCor <- hCor %>% gather(key = sample, value = abundance, 3:ncol(hCor)) %>%
+    dplyr::select(sample, symbol, abundance)
+  
+  hCorSD <-
+    hCor %>% group_by(sample) %>% summarise(sd = sd(abundance))
+  
+  return(hCorSD %>% summarise(sum(sd < sd(hCor$abundance)) / n()) %>% as.numeric())
+}
+
+dat <- dat %>% rowwise() %>% mutate(bcDelta = BC_delta(GOterms))
+
+ggplot(dat, aes(x = medCors, y = bcDelta)) + geom_point(alpha = 0.5) + 
+  geom_text_repel(data = filter(test, medCors > 0.2), 
+                    aes(label = GO), colour = 'black', size = 2)
 ```
 
