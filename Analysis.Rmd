@@ -62,7 +62,8 @@ pepTidy = pepRaw %>%
 
 
 ```{r echo=TRUE, fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
-ggplot(pepTidy, aes(log2(intensity), colour = cell)) + geom_density() + theme_bw() + xlim(-20,20)
+# ggplot(pepTidy, aes(log2(intensity), colour = cell)) + 
+#   geom_density() + theme_bw() + xlim(-20,20)
 ```
 
 The peptide intensities appear to follow a log-normal distribution.
@@ -71,7 +72,8 @@ The peptide intensities appear to follow a log-normal distribution.
 pairs = pepTidy %>% filter(condition == 'ctrl') %>% 
   dplyr::select(cell, peptide, intensity) %>% spread(cell, intensity)
 
-ggpairs(log2(pairs[,2:ncol(pairs)]), lower = list(continuous = wrap("points", alpha = 0.1, size = 0.1))) + theme_bw()
+# ggpairs(log2(pairs[,2:ncol(pairs)]), 
+#         lower = list(continuous = wrap("points", alpha = 0.1, size = 0.1))) + theme_bw()
 ```
 
 ```{r echo=TRUE, fig.height=10, fig.width=10,message=FALSE, warning=FALSE}
@@ -80,7 +82,7 @@ meanSD = pepTidy %>% filter(condition != 'ctrl') %>%
   summarise(mean = mean(intensity, na.rm = T), 
             sd = sd(intensity, na.rm = T) / mean)
 
-ggplot(meanSD, aes(x = log10(mean), y = sd)) + geom_point() + geom_smooth(method = lm, formula = y ~ poly(x, 2))
+# ggplot(meanSD, aes(x = log10(mean), y = sd)) + geom_point() + geom_smooth(method = lm, formula = y ~ poly(x, 2))
 ```
 
 
@@ -89,14 +91,14 @@ ggplot(meanSD, aes(x = log10(mean), y = sd)) + geom_point() + geom_smooth(method
 ```{r echo=TRUE, fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
 pepTidy = pepTidy %>% group_by(cell) %>% mutate(intensity = intensity / median(intensity, na.rm = T))
 
-ggplot(pepTidy, aes(log2(intensity), colour = cell)) + geom_density() + theme_bw() + xlim(-8,8)
+# ggplot(pepTidy, aes(log2(intensity), colour = cell)) + geom_density() + theme_bw() + xlim(-8,8)
 ```
 
 ```{r echo=TRUE, fig.height=10, fig.width=10,message=FALSE, warning=FALSE}
 pairs = pepTidy %>% filter(condition == 'ctrl') %>% 
   dplyr::select(cell, peptide, intensity) %>% spread(cell, intensity)
 
-ggpairs(log2(pairs[,2:ncol(pairs)]), lower = list(continuous = wrap("points", alpha = 0.1, size = 0.1))) + theme_bw()
+# ggpairs(log2(pairs[,2:ncol(pairs)]), lower = list(continuous = wrap("points", alpha = 0.1, size = 0.1))) + theme_bw()
 ```
 
 
@@ -106,14 +108,14 @@ ggpairs(log2(pairs[,2:ncol(pairs)]), lower = list(continuous = wrap("points", al
 pepTidy = pepTidy %>% group_by(run, peptide) %>% 
   mutate(intensity = intensity / median(intensity, na.rm = T)) %>% ungroup()
  
-ggplot(pepTidy, aes(log2(intensity), colour = cell)) + geom_density() + theme_bw() + xlim(-8,8)
+# ggplot(pepTidy, aes(log2(intensity), colour = cell)) + geom_density() + theme_bw() + xlim(-8,8)
 ```
 
 ```{r echo=TRUE, fig.height=10, fig.width=10,message=FALSE, warning=FALSE}
 pairs = pepTidy %>% dplyr::filter(condition == 'ctrl') %>% 
   dplyr::select(cell, peptide, intensity) %>% spread(cell, intensity)
  
-ggpairs(log2(pairs[,2:ncol(pairs)]), lower = list(continuous = wrap("points", alpha = 0.1, size = 0.1))) + theme_bw()
+# ggpairs(log2(pairs[,2:ncol(pairs)]), lower = list(continuous = wrap("points", alpha = 0.1, size = 0.1))) + theme_bw()
 ```
 
 
@@ -152,7 +154,7 @@ rownames(cor) = protImpute$Uniprot
 mypal = rev(colorRampPalette(brewer.pal(11, 'RdBu'))(201))
 k = 2
 map = pheatmap(cor, show_colnames = F, show_rownames = F, color = mypal, breaks = seq(-1,1, by = 0.01), cutree_cols = k, cutree_rows = k, legend = F)
-map
+#map
 
 tibble(Uniprot = protImpute$Uniprot, Cluster = cutree(map$tree_row, k = k)) %>% write_csv('/Users/kylekovary/Downloads/Map.csv')
 
@@ -174,31 +176,15 @@ columns(org.Xl.eg.db)
 keys <- keys(org.Xl.eg.db, keytype = 'UNIPROT')
 
 GO <- protImpute %>% dplyr::select(Uniprot) %>% filter(Uniprot %in% keys) %>% 
-  rowwise() %>% 
-  mutate(GO = mapIds(org.Xl.eg.db, 
+  mutate(GOterms = mapIds(org.Xl.eg.db, 
                      keys = Uniprot, 
                      keytype = 'UNIPROT', 
                      column = 'GOALL', 
-                     multiVals = 'list')) %>% 
-  ungroup()
+                     multiVals = 'list'))
 
-allGO <- tibble(GOterms = unlist(GO$GO) %>% unique())
-allGO <- allGO %>% group_by(GOterms) %>% mutate(Uniprot = GO[grep(GOterms, GO$GO),1] %>% as.list()) %>% ungroup()
-
-write_csv(mutate(GO, GO = paste(unlist(GO), sep = '', collapse = ',')), '/Users/kylekovary/Documents/GitHub/Proteome-Expression-Covariation/analysisData/GO.csv')
-
-write_csv(mutate(allGO, Uniprot = paste(unlist(Uniprot), sep = '', collapse = ',')), '/Users/kylekovary/Documents/GitHub/Proteome-Expression-Covariation/analysisData/allGO.csv')
-
-
-```
-
-## GO Term Analysis
-```{r echo=TRUE, message=FALSE, warning=FALSE}
-GO <- read_csv('/Users/kylekovary/Documents/GitHub/Proteome-Expression-Covariation/analysisData/GO.csv') %>% mutate(GO = strsplit(GO, split = ','))
-
-allGO <- read_csv('/Users/kylekovary/Documents/GitHub/Proteome-Expression-Covariation/analysisData/allGO.csv') %>% 
-  mutate(Uniprot = strsplit(Uniprot, split = ','),
-         GO = mapIds(GO.db, 
+allGO <- unnest(GO, cols = GOterms) %>% nest(Uniprot = Uniprot) %>%
+  rowwise() %>% mutate(n = length(unlist(Uniprot))) %>% ungroup() %>%
+  mutate(GO = mapIds(GO.db, 
                      keys = GOterms, 
                      keytype = 'GOID', 
                      column = 'TERM') %>% as.character(),
@@ -208,7 +194,18 @@ allGO <- read_csv('/Users/kylekovary/Documents/GitHub/Proteome-Expression-Covari
                      column = 'ONTOLOGY') %>% as.character()) %>%
   dplyr::select(GOterms, GO, ontology, everything())
 
-
+# allGO <- tibble(GOterms = unlist(GO$GO) %>% unique())
+# allGO <- allGO %>% group_by(GOterms) %>% mutate(Uniprot = GO[grep(GOterms, GO$GO),1] %>% as.list()) %>% ungroup() %>%
+#   mutate(
+#          GO = mapIds(GO.db, 
+#                      keys = GOterms, 
+#                      keytype = 'GOID', 
+#                      column = 'TERM') %>% as.character(),
+#          ontology = mapIds(GO.db, 
+#                      keys = GOterms, 
+#                      keytype = 'GOID', 
+#                      column = 'ONTOLOGY') %>% as.character()) %>%
+#   dplyr::select(GOterms, GO, ontology, everything())
 
 corVector <- function(uniprotList, corMat){
   targets = uniprotList %>% unlist()
@@ -216,9 +213,31 @@ corVector <- function(uniprotList, corMat){
   temp[lower.tri(temp, diag = F)]
 }
 
-allGO <- allGO %>% group_by(GOterms) %>% dplyr::mutate(cors = corVector(Uniprot, cor) %>% as_tibble() %>% as.list()) %>% ungroup()
+selectCV <- function(x){
+  protVar %>% filter(Uniprot %in% unlist(x)) %>% 
+    dplyr::select(cv) %>% as_tibble() %>% as.list()
+}
 
-x <- allGO %>% rowwise %>% mutate(size = length(Uniprot)) %>% dplyr::select(GOterms, size, cors) %>% unnest() %>% group_by(GOterms) %>% 
+allGO <- allGO %>% group_by(GOterms) %>% 
+  dplyr::mutate(cors = corVector(Uniprot, cor) %>% as_tibble() %>% as.list(),
+                cv = selectCV(Uniprot)) %>% ungroup() %>%
+  rowwise() %>% mutate(medCors = mean(cors, na.rm = TRUE),
+                       medCV = mean(cv, na.rm = TRUE)) %>%
+  ungroup() %>%
+filter(length(Uniprot) > 3,
+       !is.na(medCors),
+       !is.na(medCV))
+
+#saveRDS(GO, 'analysisData/GO.RDS')
+#saveRDS(allGO, 'analysisData/allGO.RDS')
+```
+
+## GO Term Analysis
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#GO <- readRDS('analysisData/GO.RDS')
+#allGO <- readRDS('analysisData/allGO.RDS')
+
+x <- allGO %>% rowwise %>% mutate(size = nrow(Uniprot)) %>% dplyr::select(GOterms, size, cors) %>% unnest() %>% group_by(GOterms) %>% 
   summarise(median = median(cors, na.rm = T),
             sd = sd(cors, na.rm = T),
             size = mean(size)) %>% 
@@ -262,14 +281,6 @@ protVar <- protImpute %>% gather(key = 'cell', value = 'abundance', 2:ncol(protI
 ggplot(protVar, aes(x = cv)) + geom_histogram(bins = 50) + theme_bw()
 
 
-selectCV <- function(x){
-  protVar %>% filter(Uniprot %in% unlist(x)) %>% 
-    dplyr::select(cv) %>% as_tibble() %>% as.list()
-}
-
-allGO <- allGO %>% group_by(GOterms) %>% 
-  dplyr::mutate(cv = selectCV(Uniprot)) %>% ungroup()
-
 meanCV = allGO %>% dplyr::select(GOterms, cv) %>% unnest() %>% group_by(GOterms) %>% 
   summarise(mean = mean(cv), size = n()) %>% mutate(GOterms = fct_reorder(GOterms, mean))
 
@@ -310,8 +321,7 @@ glyc <- glyc %>% gather(key = sample, value = abundance, 3:ncol(glyc)) %>%
 
 ## Cor vs CV
 ```{r}
-test = allGO %>% rowwise() %>% mutate(n = length(Uniprot), medCors = mean(cors), medCV = mean(cv)) %>%
-  filter(length(Uniprot) > 3, !is.na(medCors), !is.na(medCV))
+test = allGO %>% filter(length(Uniprot) > 3, !is.na(medCors), !is.na(medCV))
 
 ggplot(test, aes(x = medCors, y = medCV)) + geom_point(alpha = 0.5) + theme_bw()
 

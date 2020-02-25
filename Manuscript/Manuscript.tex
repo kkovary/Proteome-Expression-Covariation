@@ -290,19 +290,16 @@ coordinate expression.
 tradeoff between protein co-expression and
 noise}\label{total-variance-metric-reveals-certain-modules-enforce-a-tradeoff-between-protein-co-expression-and-noise}}
 
-Variance Sum Law --- Independent Case
-
-\[\sigma_{_{x+y}}^2 = \sigma_{_{x}}^2 + \sigma_{_{y}}^2\]
-
 Variance Sum Law --- Dependent Case
 
-\[\sigma_{_{x+y}}^2 = \sigma_{_{x}}^2 + \sigma_{_{y}}^2 + 2Cov(x,y)\]
-\[\rho = \dfrac{Cov(x,y)}{\sigma_{_{x}} \sigma_{_{y}}}\]
-\[\sigma_{_{x+y}}^2 = \sigma_{_{x}}^2 + \sigma_{_{y}}^2 + 2\rho \sigma_{_{x}} \sigma_{_{y}}\]
+The sum of variance for a group of proteins \(X_{1},\dotsc,X_{n}\) with
+dependent relationships:
 
-\[\sigma_{{}_{total}} = \sqrt{\sum\limits_{i=1}^{n} \; \sigma_{i}^{2} \; \sum\limits_{j\neq i} \; 2\rho_{_{i,j}}\sigma_{_{i}}\sigma_{_{j}}}\]
+\[var\left(\sum_{i=1}^n X_{i}\right) = \sum_{i=1}^{n} var(X_{i}) + 2\sum_{i,j:i<j}^{n} cov(X_{i},X_{j})\]
 
-\[\varsigma_{{}_{norm}} = \dfrac{\sigma_{{}_{total}}}{n}\]
+\[\sigma_{{}_{total}} = \sqrt{var\left(\sum_{i=1}^n X_{i}\right)}\]
+
+\[\sigma_{{}_{norm}} = \dfrac{\sigma_{{}_{total}}}{n}\]
 
 When calculating the total variance of a pathway or general group of
 proteins, the total variance is the square root of the sums of the
