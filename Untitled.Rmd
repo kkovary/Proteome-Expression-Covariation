@@ -67,7 +67,7 @@ protImpute <- pepTidy %>%
   mutate(intensity = intensity / intensity[label == "126"]) %>%
   ungroup() %>%
   filter(run != "ctrl", condition != "ctrl") %>%
-  #dplyr::filter(abs((intensity)) < 2*sd((pepTidy$intensity), na.rm = T)) %>%
+  dplyr::filter(abs((intensity)) < 2*sd((pepTidy$intensity), na.rm = T)) %>%
   group_by(cell, run, label, condition, Uniprot) %>% 
   summarise(abundance = mean(intensity, na.rm = T)) %>% ungroup() %>%
   group_by(Uniprot) %>%
@@ -245,7 +245,7 @@ allKEGG <- allKEGG %>%
                              normVar = totVar / n) %>% ungroup() %>%
   mutate(interval = cut_number(normVar, n = 4))
 
-ggplot(allKEGG, aes(x = medCors, y = medCV)) + geom_point(aes(color = interval)) +
+ggplot(allKEGG, aes(x = corSkew, y = medCV)) + geom_point(aes(color = interval)) +
   geom_label_repel(data = allKEGG, 
                   aes(label = KEGG_name), 
                   colour = 'black', 
@@ -256,8 +256,33 @@ glyc <- filter(allKEGG, KEGG == '00010')$Uniprot %>% unlist()
 
 glycMat <- cor[rownames(cor) %in% glyc,colnames(cor) %in% glyc]
 rownames(glycMat) <- mapIds(org.Xl.eg.db, keys = rownames(glycMat), keytype = 'UNIPROT', column = 'SYMBOL')
-pheatmap(glycMat, show_colnames = T, show_rownames = T, color = mypal, breaks = seq(-1,1, by = 0.01),
-         cutree_cols = 3, cutree_rows = 3)
+
+row_anno <- data.frame(cv = unlist(allKEGG$cv[1]))
+rownames(row_anno) <- rownames(glycMat)
+
+map <- pheatmap(glycMat, show_colnames = T, show_rownames = T, color = mypal, breaks = seq(-1,1, by = 0.01),
+         cutree_cols = 3, cutree_rows = 3, annotation_row = row_anno)
+
+map.clust <- cbind(t(glycMat), cluster = cutree(map$tree_row, k = 3))
+map.clust[,ncol(map.clust) == 2]
+
+glyc2 <- names(which(map.clust[,ncol(map.clust)] == 2))
+totVarGroup(glyc2) / length(glyc2)
+protVar %>% filter(Uniprot %in% glyc2) %>%
+  summarise(meanCV = mean(cv))
+
+glyc2 <- glycMat[which(map.clust[,ncol(map.clust)] == 2),which(map.clust[,ncol(map.clust)] == 2)]
+pheatmap(glyc2,
+         color = mypal, breaks = seq(-1,1, by = 0.01))
+
+glyc2 <- tibble(GO = "Glycolysis",
+       cor = glyc2[lower.tri(glyc2)])
+
+
+rbind(glyc2,tibble(GO = "All",
+      cor = cor[lower.tri(cor)])) %>%
+  ggplot(., aes(x = cor, fill = GO, alpha = 0.75)) + geom_density() +
+  geom_rug(data = glyc2)
 
 # pathview(genes, 
 #          pathway.id = pathway, 
