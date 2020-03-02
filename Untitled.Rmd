@@ -1,0 +1,273 @@
+---
+title: "Single Cell Xenopus TMT Analysis"
+author: "Kyle Kovary"
+date: "5/15/2019"
+output: pdf_document
+---
+
+## Setup
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(RColorBrewer)
+library(pheatmap)
+library(GGally)
+library(VIM)
+library(org.Xl.eg.db)
+library(GO.db)
+library(ggrepel)
+library(plotly)
+```
+
+## Import Data
+```{r setup, include=FALSE}
+
+# Import Data
+files = list.files('TMTdata/', pattern = 'TargetPeptideSpectrumMatch', full.names = T)
+
+for(i in seq_along(files)){
+  if(i == 1 & exists('pepRaw')){
+    rm(pepRaw)
+  } 
+  if(!exists('pepRaw')){
+    pepRaw = read_tsv(file = files[i]) %>% mutate(file = files[i], massID = 1:nrow(.))
+  } else{
+    temp = read_tsv(file = files[i]) %>% mutate(file = files[i], massID = 1:nrow(.))
+    colnames(temp) = colnames(pepRaw)
+    pepRaw = rbind(pepRaw, temp)
+    rm(temp)
+  }
+}
+pepRaw <- pepRaw %>% dplyr::select(file, massID, everything()) %>% filter(!is.na(`126`), 
+                                                                  `Quan Usage` == 'Use',
+                                                                  Confidence != 'Low')
+
+```
+
+## Data Organization
+```{r }
+pepTidy <- pepRaw %>% 
+  mutate(run = c('ctrl','a','b','c','d','e')[match(pepRaw$file, files)]) %>% 
+  group_by(file, `Annotated Sequence`) %>% 
+  mutate(pepID = letters[1:n()]) %>% ungroup() %>%
+  dplyr::select(file, run, pepID, everything()) %>%
+  gather(key = label, value = intensity, '126':'131') %>% 
+  dplyr::select(run, label, intensity, everything(), -file) %>% 
+  mutate(condition = ifelse(run == 'ctrl', 'ctrl',c('ctrl',0,20,40,60,80)[match(label,c(126:131))]),
+         intensity = as.numeric(intensity)) %>% unite(peptide, c(`Annotated Sequence`,'pepID')) %>%
+  dplyr::rename(Uniprot = `Master Protein Accessions`) %>% 
+  unite(cell, c('run','label','condition'), remove = F) %>%
+  dplyr::select(cell, run, label, condition, peptide, Uniprot, intensity)
+```
+
+## Normalization
+```{r}
+protImpute <- pepTidy %>% 
+  group_by(peptide,run) %>% 
+  mutate(intensity = intensity / intensity[label == "126"]) %>%
+  ungroup() %>%
+  filter(run != "ctrl", condition != "ctrl") %>%
+  #dplyr::filter(abs((intensity)) < 2*sd((pepTidy$intensity), na.rm = T)) %>%
+  group_by(cell, run, label, condition, Uniprot) %>% 
+  summarise(abundance = mean(intensity, na.rm = T)) %>% ungroup() %>%
+  group_by(Uniprot) %>%
+  mutate(abundance = abundance / mean(abundance, na.rm = T)) %>% 
+  group_by(cell) %>% 
+  mutate(abundance = abundance / mean(abundance, na.rm = T)) %>% 
+  ungroup() %>% 
+  dplyr::select(cell, Uniprot, abundance) %>% 
+  spread(cell, abundance) %>%
+  kNN(data = ., k = 1, impNA = TRUE) %>% as_tibble() %>% dplyr::select(Uniprot:e_131_80)
+
+```
+
+## Summary Stats
+```{r}
+protVar <- protImpute %>% gather(key = 'cell', value = 'abundance', 2:ncol(protImpute)) %>%
+  separate(cell, into = c('run','label','condition'), remove = F) %>% 
+  filter(condition != 'ctrl') %>% group_by(Uniprot) %>%
+  summarise(var = var(abundance),
+            sd = sd(abundance),
+            mean = mean(abundance),
+            cv = sd / mean)
+
+cor = cor(t(log2(protImpute[c(1:ncol(protImpute))[-c(1,grep('ctrl',colnames(protImpute)))]])), use = 'pairwise.complete.obs')
+colnames(cor) = protImpute$Uniprot
+rownames(cor) = protImpute$Uniprot
+
+cov = cov(t(log2(protImpute[c(1:ncol(protImpute))[-c(1,grep('ctrl',colnames(protImpute)))]])), use = 'pairwise.complete.obs')
+colnames(cov) = protImpute$Uniprot
+rownames(cov) = protImpute$Uniprot
+```
+
+## Map GO Terms to Proteins
+
+```{r eval=TRUE, message=FALSE, warning=FALSE}
+corVector <- function(uniprotList, corMat){
+  targets = uniprotList %>% unlist()
+  temp = corMat[rownames(corMat) %in% targets,colnames(corMat) %in% targets]
+  temp[lower.tri(temp, diag = F)]
+}
+
+selectCV <- function(x){
+  protVar %>% filter(Uniprot %in% unlist(x)) %>% 
+    dplyr::select(cv) %>% as_tibble() %>% as.list()
+}
+
+keys <- keys(org.Xl.eg.db, keytype = 'UNIPROT')
+
+allGO <- protImpute %>% dplyr::select(Uniprot) %>% filter(Uniprot %in% keys) %>% 
+  mutate(GOterms = mapIds(org.Xl.eg.db, 
+                     keys = Uniprot, 
+                     keytype = 'UNIPROT', 
+                     column = 'GOALL', 
+                     multiVals = 'list')) %>%
+  unnest(cols = GOterms) %>% nest(Uniprot = Uniprot) %>%
+  rowwise() %>% mutate(n = length(unlist(Uniprot))) %>% ungroup() %>%
+  mutate(GO = mapIds(GO.db, 
+                     keys = GOterms, 
+                     keytype = 'GOID', 
+                     column = 'TERM') %>% as.character(),
+         ontology = mapIds(GO.db, 
+                     keys = GOterms, 
+                     keytype = 'GOID', 
+                     column = 'ONTOLOGY') %>% as.character()) %>%
+  dplyr::select(GOterms, GO, ontology, everything())%>% 
+  group_by(GOterms) %>% 
+  dplyr::mutate(cors = corVector(Uniprot, cor) %>% as_tibble() %>% as.list(),
+                covs = corVector(Uniprot, cov) %>% as_tibble() %>% as.list(),
+                cv = selectCV(Uniprot)) %>% ungroup() %>%
+  rowwise() %>% mutate(medCors = mean(cors, na.rm = TRUE),
+                       medCV = mean(cv, na.rm = TRUE),
+                       totVar = sqrt(sum(cv) + 2*sum(covs)),
+                       normVar = totVar / n) %>%
+  filter(n > 3) %>%
+  ungroup()
+
+```
+
+## Plots
+```{r fig.height=8, fig.width=5}
+allGO1 <- allGO1 %>% mutate(interval = cut_number(normVar, n = 10))
+
+ggplot(allGO1, aes(x = normVar)) + geom_histogram(bins = 50)
+
+ggplot(allGO1, 
+       aes(x = medCors, y = medCV, color = interval == "[0.00652,0.0333]")) + 
+  geom_point(alpha = 0.5) + theme_bw() +
+  #facet_wrap(~interval) +
+  theme(legend.position = "bottom")
+
+ggplot(allGO1, 
+       aes(x = medCors, y = medCV)) + 
+  geom_point(alpha = 0.5) + theme_bw() +
+  geom_label_repel(data = filter(allGO1, 
+                                 interval == "[0.00652,0.0333]",
+                                 medCors > 0.15), 
+                  aes(label = GO), 
+                  colour = 'black', 
+                  size = 2,
+                  force = 10) + 
+  theme_bw()
+```
+
+## Cor histogram
+```{r}
+goTerms <- c("GO:0006739","GO:0006096","GO:0015934")
+
+allGO[grep('large ribosomal subunit',allGO$GO),]
+glyc <- filter(allGO, GOterms == 'GO:0006096')$Uniprot %>% unlist()
+
+cor_rug_plot <- function(x){
+  temp <- filter(allGO, GOterms %in% x) %>%
+    dplyr::select(GO, cors) %>% unnest(cols = cors)
+  
+  temp <- allGO %>% select(GO, cors) %>%
+    unnest(cols = cors) %>% mutate(GO = "all") %>%
+    rbind(temp,.)
+  
+  ggplot(temp, aes(x = cors, fill = GO, color = GO)) +
+    geom_density(alpha = 0.25) + 
+    geom_rug(data = filter(temp, GO != "all")) + 
+    theme_bw()
+}
+
+```
+
+## KEGG
+```{r}
+library(KEGG.db)
+kegg <- plyr::ldply(as.list(org.Xl.egPATH2EG),data.frame) %>% as_tibble() %>%
+  rename(kegg_id = ".id", gene_id = "X..i..")
+
+kegg_names <- plyr::ldply(as.list(KEGGPATHNAME2ID),data.frame) %>%
+  rename(kegg_name = ".id",
+         kegg_id = "X..i..")
+
+
+
+kegg <- protImpute %>% dplyr::select(Uniprot) %>% filter(Uniprot %in% keys) %>% 
+  mutate(KEGG = mapIds(org.Xl.eg.db, 
+                     keys = Uniprot, 
+                     keytype = 'UNIPROT', 
+                     column = "PATH", 
+                     multiVals = 'list'))
+
+allKEGG <- unnest(kegg, cols = KEGG) %>% nest(Uniprot = Uniprot) %>%
+  rowwise() %>% mutate(n = length(unlist(Uniprot))) %>% ungroup() %>%
+  mutate(KEGG_name = kegg_names$kegg_name[match(KEGG,kegg_names$kegg_id)])
+
+
+corVector <- function(uniprotList, corMat){
+  targets = uniprotList %>% unlist()
+  temp = corMat[rownames(corMat) %in% targets,colnames(corMat) %in% targets]
+  temp[lower.tri(temp, diag = F)]
+}
+
+selectCV <- function(x){
+  protVar %>% filter(Uniprot %in% unlist(x)) %>% 
+    dplyr::select(cv) %>% as_tibble() %>% as.list()
+}
+
+allKEGG <- allKEGG %>% group_by(KEGG) %>% 
+  dplyr::mutate(cors = corVector(Uniprot, cor) %>% as_tibble() %>% as.list(),
+                covs = corVector(Uniprot, cov) %>% as_tibble() %>% as.list(),
+                cv = selectCV(Uniprot)) %>% ungroup() %>%
+  rowwise() %>% mutate(medCors = mean(cors, na.rm = TRUE),
+                       medCV = mean(cv, na.rm = TRUE)) %>%
+  ungroup() %>%
+filter(n > 3,
+       !is.na(medCors),
+       !is.na(medCV))
+
+allKEGG <- allKEGG %>% 
+  rowwise() %>% mutate(totVar = sqrt(sum(cv, na.rm = T) + sum(covs, na.rm = T)),
+                             normVar = totVar / n) %>% ungroup() %>%
+  mutate(interval = cut_number(normVar, n = 4))
+
+ggplot(allKEGG, aes(x = medCors, y = medCV)) + geom_point(aes(color = interval)) +
+  geom_label_repel(data = allKEGG, 
+                  aes(label = KEGG_name), 
+                  colour = 'black', 
+                  size = 2,
+                  force = 10)
+
+glyc <- filter(allKEGG, KEGG == '00010')$Uniprot %>% unlist()
+
+glycMat <- cor[rownames(cor) %in% glyc,colnames(cor) %in% glyc]
+rownames(glycMat) <- mapIds(org.Xl.eg.db, keys = rownames(glycMat), keytype = 'UNIPROT', column = 'SYMBOL')
+pheatmap(glycMat, show_colnames = T, show_rownames = T, color = mypal, breaks = seq(-1,1, by = 0.01),
+         cutree_cols = 3, cutree_rows = 3)
+
+# pathview(genes, 
+#          pathway.id = pathway, 
+#          species = 'mmu', 
+#          same.layer = F,
+#          low = list(gene = 'blue'),
+#          mid = list(gene = 'transparent'),
+#          high = list(gene = 'red'),
+#          limit = list(gene = c(-2,2))
+# )
+  
+```
+
