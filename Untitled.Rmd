@@ -17,6 +17,8 @@ library(org.Xl.eg.db)
 library(GO.db)
 library(ggrepel)
 library(plotly)
+library(cowplot)
+library(patchwork)
 ```
 
 ## Import Data
@@ -279,10 +281,34 @@ glyc2 <- tibble(GO = "Glycolysis",
        cor = glyc2[lower.tri(glyc2)])
 
 
-rbind(glyc2,tibble(GO = "All",
+p1 <- rbind(glyc2,tibble(GO = "All",
       cor = cor[lower.tri(cor)])) %>%
-  ggplot(., aes(x = cor, fill = GO, alpha = 0.75)) + geom_density() +
-  geom_rug(data = glyc2)
+  ggplot(.,aes(x = cor, fill = GO)) + geom_density(alpha = 0.75, color = "transparent") +
+  scale_fill_manual(values = c('#bababa','#e08214')) +
+  geom_rug(data = glyc2, color = '#e08214') +
+  theme_bw() +
+  #theme(legend.position = c(.2,.8)) +
+  theme(legend.position = "none") +
+  xlim(-1,1)
+
+p2 <- rbind(glyc2,tibble(GO = "All",
+      cor = cor[lower.tri(cor)])) %>%
+  ggplot(., aes(x = GO, y = cor, fill = GO)) + 
+  geom_boxplot(notch = TRUE, alpha = 0.75) +
+  scale_fill_manual(values = c('#bababa','#e08214')) +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  ylim(-1,1) +
+  coord_flip()
+
+plot_grid(p1,p2, ncol = 1, 
+          rel_heights = c(2,1),
+          align = 'v')
+
+p1/p2 + 
+  plot_annotation(title = "Glycolysis",
+                  tag_levels = "A") +
+  plot_layout(heights = c(2,1))
 
 # pathview(genes, 
 #          pathway.id = pathway, 
@@ -293,6 +319,54 @@ rbind(glyc2,tibble(GO = "All",
 #          high = list(gene = 'red'),
 #          limit = list(gene = c(-2,2))
 # )
-  
+  p1
 ```
 
+
+## Figure 1
+```{r fig.height=6.5, fig.width=6.5}
+set.seed(41)
+
+low_cor <- corProts(2, 100, 0, 100, 30)
+low_cor <- low_cor %>% as_tibble() %>% mutate(cor = "low_cor", time = 1:nrow(low_cor)) %>%
+  rename(ProtA = "V1", ProtB = "V2")
+
+high_cor <- corProts(2, 100, 0.8, 100, 30)
+high_cor <- high_cor %>% as_tibble() %>% mutate(cor = "high_cor", time = 1:nrow(high_cor)) %>%
+  rename(ProtA = "V1", ProtB = "V2")
+
+p1 <- rbind(low_cor, high_cor) %>% pivot_longer(ProtA:ProtB, names_to = "protein", values_to = "abundance") %>%
+  ggplot(., aes(x = time, y = abundance, color = protein)) + geom_path() +
+  facet_wrap(~cor, ncol = 1) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+p2 <- rbind(low_cor, high_cor) %>% pivot_longer(ProtA:ProtB, names_to = "protein", values_to = "abundance") %>%
+  ggplot(., aes(x = protein, y = abundance, color = protein)) + 
+  geom_boxplot() + facet_wrap(~cor, ncol = 1) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+p3 <- rbind(low_cor, high_cor) %>%
+  ggplot(., aes(x = ProtA, y = ProtB, color = cor)) + geom_point() +
+  stat_ellipse() +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+p4 <- tibble(cor = c("High Cor","Low Cor"),
+       var_sum = c(sqrt(30^2 + 30^2 + 2*0.8*30^2),
+                   sqrt(30^2 + 30^2 + 2*0*30^2))) %>%
+  ggplot(., aes(x = cor, y = var_sum, fill = cor)) + geom_bar(stat = "identity") +
+  theme_minimal()
+
+
+# pp1 <- p1 + p2 + plot_layout(widths = c(3,1))
+# pp2 <- p3 + p4
+# 
+# pp1 / pp2 + plot_annotation(tag_levels = "A") & theme(legend.position = "none")
+
+p1 / (p3 + p4) + plot_annotation(tag_levels = "A") & theme(legend.position = "none")
+
+
+
+```
