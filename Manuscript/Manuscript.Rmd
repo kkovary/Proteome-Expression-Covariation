@@ -31,7 +31,7 @@ output:
   html_document: null
   
   word_document: null
-
+z
 documentclass: article
 capsize: normalsize
 geometry: margin=1in

@@ -23,7 +23,8 @@ files = list.files('TMTdata/', pattern = 'TargetPeptideSpectrumMatch', full.name
 for(i in seq_along(files)){
   if(i == 1 & exists('pepRaw')){
     rm(pepRaw)
-  } else if(!exists('pepRaw')){
+  } 
+  if(!exists('pepRaw')){
     pepRaw = read_tsv(file = files[i]) %>% mutate(file = files[i], massID = 1:nrow(.))
   } else{
     temp = read_tsv(file = files[i]) %>% mutate(file = files[i], massID = 1:nrow(.))
@@ -52,7 +53,8 @@ pepTidy = pepRaw %>%
   gather(key = label, value = intensity, '126':'131') %>% 
   dplyr::select(run, label, intensity, everything(), -file) %>% 
   mutate(condition = ifelse(run == 'ctrl', 'ctrl',c('ctrl',0,20,40,60,80)[match(label,c(126:131))]),
-         intensity = as.numeric(intensity)) %>% unite(peptide, c(`Annotated Sequence`,'pepID')) %>%
+         intensity = as.numeric(intensity)) %>% 
+  unite(peptide, c(`Annotated Sequence`,'pepID')) %>%
   dplyr::rename(Uniprot = `Master Protein Accessions`) %>% 
   unite(cell, c('run','label','condition'), remove = F) %>%
   dplyr::select(cell, run, label, condition, peptide, Uniprot, intensity)
@@ -76,20 +78,10 @@ pairs = pepTidy %>% filter(condition == 'ctrl') %>%
 #         lower = list(continuous = wrap("points", alpha = 0.1, size = 0.1))) + theme_bw()
 ```
 
-```{r echo=TRUE, fig.height=10, fig.width=10,message=FALSE, warning=FALSE}
-meanSD = pepTidy %>% filter(condition != 'ctrl') %>% 
-  group_by(peptide) %>% 
-  summarise(mean = mean(intensity, na.rm = T), 
-            sd = sd(intensity, na.rm = T) / mean)
-
-# ggplot(meanSD, aes(x = log10(mean), y = sd)) + geom_point() + geom_smooth(method = lm, formula = y ~ poly(x, 2))
-```
-
-
 ## Variance and Co-variance Between Cells After Cell Normalization
 
 ```{r echo=TRUE, fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
-pepTidy = pepTidy %>% group_by(cell) %>% mutate(intensity = intensity / median(intensity, na.rm = T))
+pepTidy = pepTidy %>% group_by(cell) %>% mutate(intensity = intensity / mean(intensity, na.rm = T))
 
 # ggplot(pepTidy, aes(log2(intensity), colour = cell)) + geom_density() + theme_bw() + xlim(-8,8)
 ```
@@ -106,7 +98,7 @@ pairs = pepTidy %>% filter(condition == 'ctrl') %>%
 
 ```{r echo=TRUE, fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
 pepTidy = pepTidy %>% group_by(run, peptide) %>% 
-  mutate(intensity = intensity / median(intensity, na.rm = T)) %>% ungroup()
+  mutate(intensity = intensity / mean(intensity, na.rm = T)) %>% ungroup()
  
 # ggplot(pepTidy, aes(log2(intensity), colour = cell)) + geom_density() + theme_bw() + xlim(-8,8)
 ```
@@ -119,14 +111,12 @@ pairs = pepTidy %>% dplyr::filter(condition == 'ctrl') %>%
 ```
 
 
-There are 
-
 ## Variance and Co-variance Between Cells After Removing Peptides Outside of 2*sd
 
 ```{r echo=TRUE, fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
-pepTidy %>% dplyr::filter(abs(log2(intensity)) < 2*sd(log2(pepTidy$intensity), na.rm = T))
+pepTidy <- pepTidy %>% dplyr::filter(abs(log2(intensity)) < 2*sd(log2(pepTidy$intensity), na.rm = T))
 
-ggplot(pepTidy, aes(log2(intensity), colour = cell)) + geom_density() + theme_bw() + xlim(-4,4)
+#ggplot(pepTidy, aes(log2(intensity), colour = cell)) + geom_density() + theme_bw() + xlim(-4,4)
 ```
 
 The standard deviation of all peptides across eggs was calculated, and every peptide that had a value outside of `r 2*sd(log2(pepTidy$intensity), na.rm = T)`
@@ -147,30 +137,49 @@ pairs = protTidy %>% dplyr::select(cell, Uniprot, abundance) %>% spread(cell, ab
 
 protImpute = kNN(data = pairs, k = 1) %>% as_tibble() %>% dplyr::select(Uniprot:e_131_80)
 
+protVar <- protImpute %>% gather(key = 'cell', value = 'abundance', 2:ncol(protImpute)) %>%
+  separate(cell, into = c('run','label','condition'), remove = F) %>% 
+  filter(condition != 'ctrl') %>% group_by(Uniprot) %>%
+  summarise(var = var(abundance),
+            sd = sd(abundance),
+            mean = mean(abundance),
+            cv = sd / mean)
+
+ggplot(protVar, aes(x = sd)) + geom_histogram(bins = 50) + theme_bw()
+
+
 cor = cor(t(log2(protImpute[c(1:ncol(protImpute))[-c(1,grep('ctrl',colnames(protImpute)))]])), use = 'pairwise.complete.obs')
 colnames(cor) = protImpute$Uniprot
 rownames(cor) = protImpute$Uniprot
 
 mypal = rev(colorRampPalette(brewer.pal(11, 'RdBu'))(201))
-k = 2
+k = 1
 map = pheatmap(cor, show_colnames = F, show_rownames = F, color = mypal, breaks = seq(-1,1, by = 0.01), cutree_cols = k, cutree_rows = k, legend = F)
-#map
+map
 
-tibble(Uniprot = protImpute$Uniprot, Cluster = cutree(map$tree_row, k = k)) %>% write_csv('/Users/kylekovary/Downloads/Map.csv')
+cov = cov(t(log2(protImpute[c(1:ncol(protImpute))[-c(1,grep('ctrl',colnames(protImpute)))]])), use = 'pairwise.complete.obs')
+colnames(cov) = protImpute$Uniprot
+rownames(cov) = protImpute$Uniprot
+
+
+
+
+#tibble(Uniprot = protImpute$Uniprot, Cluster = cutree(map$tree_row, k = k)) %>% write_csv('/Users/kylekovary/Downloads/Map.csv')
 
 remove = which(is.na(pairs), arr.ind = T)[,1] %>% unique()
 pca = prcomp(protImpute[,2:ncol(protImpute)])
 
 pcaDF = tibble(cell = rownames(pca$rotation), PC1 = pca$rotation[,1], PC2 = pca$rotation[,2])
 pcaDF = pcaDF %>% separate(cell, into = c('run','label','condition'), remove = F) %>% print()
-ggplot(pcaDF, aes(x = PC1, y = PC2, colour = condition)) + geom_point(size = 5)
+ggplot(pcaDF, aes(x = PC1, y = PC2, colour = condition)) + stat_ellipse() + 
+  geom_point(size = 5)
 
 ```
 
 ## Map GO Terms to Proteins
 
-```{r eval=F}
-columns(org.Xl.eg.db)
+```{r eval=TRUE}
+#columns(org.Xl.eg.db)
 #mapIds(org.Xl.eg.db, keys = 'A0JPG5', keytype = 'UNIPROT', column = 'GOALL', multiVals = 'list')
 
 keys <- keys(org.Xl.eg.db, keytype = 'UNIPROT')
@@ -220,13 +229,17 @@ selectCV <- function(x){
 
 allGO <- allGO %>% group_by(GOterms) %>% 
   dplyr::mutate(cors = corVector(Uniprot, cor) %>% as_tibble() %>% as.list(),
+                covs = corVector(Uniprot, cov) %>% as_tibble() %>% as.list(),
                 cv = selectCV(Uniprot)) %>% ungroup() %>%
   rowwise() %>% mutate(medCors = mean(cors, na.rm = TRUE),
                        medCV = mean(cv, na.rm = TRUE)) %>%
   ungroup() %>%
-filter(length(Uniprot) > 3,
+filter(n > 3,
        !is.na(medCors),
        !is.na(medCV))
+
+allGO <- allGO %>% rowwise %>% mutate(totVar = sqrt(sum(cv) + sum(covs)),
+                             normVar = totVar / n)
 
 #saveRDS(GO, 'analysisData/GO.RDS')
 #saveRDS(allGO, 'analysisData/allGO.RDS')
@@ -273,14 +286,6 @@ ggplot(mitoDF, aes(x = as.numeric(condition), y = mean, colour = Uniprot)) + geo
 ## Variance of GO Terms
 ```{r}
 
-protVar <- protImpute %>% gather(key = 'cell', value = 'abundance', 2:ncol(protImpute)) %>%
-  separate(cell, into = c('run','label','condition'), remove = F) %>% 
-  filter(condition != 'ctrl') %>% group_by(Uniprot) %>%
-  summarise(cv = sd(abundance)/mean(abundance))
-
-ggplot(protVar, aes(x = cv)) + geom_histogram(bins = 50) + theme_bw()
-
-
 meanCV = allGO %>% dplyr::select(GOterms, cv) %>% unnest() %>% group_by(GOterms) %>% 
   summarise(mean = mean(cv), size = n()) %>% mutate(GOterms = fct_reorder(GOterms, mean))
 
@@ -301,8 +306,8 @@ ggplot(topGO, aes(x = GO, y = cv)) + geom_boxplot(outlier.size = 1) + geom_point
 ```
 
 ```{r message=FALSE, warning=FALSE}
-allGO[grep('ribosom',allGO$GO),]
-glyc <- filter(allGO, GOterms == 'GO:0005840')$Uniprot %>% unlist()
+allGO[grep('glycoly',allGO$GO),]
+glyc <- filter(allGO, GOterms == 'GO:0006096')$Uniprot %>% unlist()
 
 glycMat <- cor[rownames(cor) %in% glyc,colnames(cor) %in% glyc]
 rownames(glycMat) <- mapIds(org.Xl.eg.db, keys = rownames(glycMat), keytype = 'UNIPROT', column = 'SYMBOL')
@@ -319,9 +324,18 @@ glyc <- glyc %>% gather(key = sample, value = abundance, 3:ncol(glyc)) %>%
 #ggpairs(log2(glyc[,2:ncol(glyc),]))
 ```
 
+```{r}
+x <- tibble(cor = c(corVect$cor,glycMat[lower.tri(glycMat)]),
+       label = c(rep('All', nrow(corVect)),
+                 rep('Gly',length(glycMat[lower.tri(glycMat)]))))
+
+ggplot(x, aes(x = cor, fill = label, color = label)) + geom_density(alpha = 0.5) + geom_rug(data = filter(x, label == 'Gly'))
+
+```
+
 ## Cor vs CV
 ```{r}
-test = allGO %>% filter(length(Uniprot) > 3, !is.na(medCors), !is.na(medCV))
+test <- allGO %>% filter(n > 3, !is.na(medCors), !is.na(medCV))
 
 ggplot(test, aes(x = medCors, y = medCV)) + geom_point(alpha = 0.5) + theme_bw()
 
@@ -415,11 +429,10 @@ totVarGroup <- function(x){
   
 }
 
-allGO1 <- allGO %>% filter(!is.na(GOterms)) %>% rowwise() %>% 
-  mutate(n = length(unlist(Uniprot)),
-         totVar = totVarGroup(Uniprot),
+allGO1 <- allGO %>% filter(!is.na(GOterms)) %>% rowwise() %>%
+  mutate(totVar = totVarGroup(Uniprot),
          normVar = totVar / n) %>%
-  filter(n > 3)
+  filter(n > 3) %>% ungroup()
 
 allGO1 %>% arrange(desc(normVar)) %>% print(n = 100)
 allGO1 %>% arrange(normVar) %>% print(n = 100)
@@ -430,7 +443,7 @@ ggplot(allGO1, aes(x = normVar, y = totVar)) + geom_point()
 ggplot(allGO1, aes(x = log2(n), y = log2(totVar))) + geom_point()
 ggplot(allGO1, aes(x = GO, y = normVar)) + geom_point()
 
-ggplot(allGO1, aes(x = normVar)) + geom_histogram(bins = 30) + 
+ggplot(allGO, aes(x = normVar)) + geom_histogram(bins = 30) + 
   geom_vline(xintercept = c(0.15, 0.1), colour = 'red', linetype = 'dashed') +
   theme_bw()
 
@@ -454,36 +467,43 @@ It doesn't appear to be the case. This could be because these are likely the top
 ### Is lower variance compensating for high correlations? How much of a role is negative correlation playing in reducing the total variance?
 ```{r}
 dat <- left_join(ungroup(test), allGO1, by = "GOterms") %>%
-  dplyr::select(GOterms, GO.x, ontology.x, Uniprot.x, cors.x, cv.x, n.x,medCors, medCV, normVar)
+  dplyr::select(GOterms, GO.x, ontology.x, Uniprot.x, cors.x, cv.x, n.x,medCors.x, medCV.x, normVar) %>%
+  dplyr::rename(GO = GO.x, ontology = ontology.x, Uniprot = Uniprot.x, cors = cors.x, cv = cv.x,
+                n = n.x, medCors = medCors.x, medCV = medCV.x) %>%
+  mutate(score = ifelse(normVar > 0.145,
+                              'High',
+                              ifelse(normVar < 0.115,
+                                     'Low',
+                                     'Med')))
 
-dat$score <- 'Med'
-dat[dat$normVar > 0.145, 'score'] <- 'High'
-dat[dat$normVar < 0.115, 'score'] <- 'Low'
+# dat$score <- 'Med'
+# dat[dat$normVar > 0.145, 'score'] <- 'High'
+# dat[dat$normVar < 0.115, 'score'] <- 'Low'
 
 ggplot(dat, aes(x = medCors, y = medCV, colour = score)) + geom_point() 
 ggplot(dat, aes(x = medCors, y = medCV)) + geom_point() + geom_smooth(method = 'lm') + facet_grid(~score)
 
-ggplot(filter(dat, n.x > 5), aes(x = medCors, y = medCV, colour = score)) + 
+ggplot(filter(dat, n > 5), aes(x = medCors, y = medCV, colour = score)) + 
   geom_point(alpha = 0.75) + scale_color_manual(values=c("blue", "red", "grey"))
 # + #scale_colour_gradient(low="red", high="blue") +
 #  geom_text_repel(data = filter(dat, score != 'Med'), aes(label = GOterms), colour = 'black', size = 1)
 
-ggplot(filter(dat, n.x > 5, score != 'Med', ontology.x != 'CC'), aes(x = medCors, y = medCV, colour = normVar)) + 
+ggplot(filter(dat, n > 5, score != 'Med', ontology != 'CC'), aes(x = medCors, y = medCV, colour = normVar)) + 
   geom_point() + scale_colour_gradient(low="red", high="blue") + 
   geom_smooth(method = 'lm') + facet_wrap(~score, scales = 'free') +
-  geom_text_repel(data = filter(dat, n.x > 5, score != 'Med'), aes(label = GO.x), colour = 'black', size = 2)
+  geom_text_repel(data = filter(dat, n > 5, score != 'Med'), aes(label = GO), colour = 'black', size = 2)
 
-plot_ly(filter(dat, n.x > 5), z = ~normVar, y = ~medCV, x = ~medCors, color = ~score, colors = c("red", "blue", "grey")) %>%
+plot_ly(filter(dat, n > 5), z = ~normVar, y = ~medCV, x = ~medCors, color = ~score, colors = c("red", "blue", "grey")) %>%
   add_markers() %>%
   layout(scene = list(zaxis = list(title = 'Normalized Variance'),
                      yaxis = list(title = 'Median CV'),
                      xaxis = list(title = 'Median Correlation')))
 
-ggplot(filter(dat, n.x > 5), aes(y = normVar, x = medCV)) + geom_point(alpha = 0.75)
-ggplot(filter(dat, n.x > 5), aes(y = normVar, x = medCors)) + geom_point(alpha = 0.75)
+ggplot(filter(dat, n > 5), aes(y = normVar, x = medCV)) + geom_point(alpha = 0.75)
+ggplot(filter(dat, n > 5), aes(y = normVar, x = medCors)) + geom_point(alpha = 0.75)
 
 library(GGally)
-p <- ggpairs(filter(dat, n.x > 5), columns = c('medCV', 'medCors','normVar'), 
+p <- ggpairs(filter(dat, n > 5), columns = c('medCV', 'medCors','normVar'), 
         ggplot2::aes(colour = score, alpha = 0.5))
 
 for(i in 1:p$nrow) {

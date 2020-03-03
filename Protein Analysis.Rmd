@@ -1,0 +1,174 @@
+---
+title: "Single Cell Xenopus TMT Analysis2"
+author: "Kyle Kovary"
+date: "5/15/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(RColorBrewer)
+library(pheatmap)
+library(GGally)
+library(VIM)
+library(org.Xl.eg.db)
+library(GO.db)
+library(ggrepel)
+library(plotly)
+library(ComplexHeatmap)
+
+# Import Data
+files = list.files('TMTdata/', pattern = 'TargetProtein', full.names = T)
+
+for(i in seq_along(files)){
+  if(i == 1 & exists('protRaw')){
+    rm(protRaw)
+  } 
+  if(!exists('protRaw')){
+    protRaw = read_tsv(file = files[i]) %>% mutate(file = files[i], massID = 1:nrow(.))
+  } else{
+    temp = read_tsv(file = files[i]) %>% mutate(file = files[i], massID = 1:nrow(.))
+    colnames(temp) = colnames(protRaw)
+    protRaw = rbind(protRaw, temp)
+    rm(temp)
+  }
+}
+protRaw <- protRaw %>% dplyr::select(file, massID, everything()) %>% filter(`Confidence A2` != 'Red',
+                                                                            Master == 'IsMasterProtein')
+
+```
+
+## Data Organization
+```{r }
+protRaw = protRaw %>% 
+  mutate(run = c('ctrl','a','b','c','d','e')[match(protRaw$file, files)]) %>% 
+  dplyr::select(file, run, everything())
+
+protTidy = protRaw %>% 
+  gather(key = label, 
+         value = intensity, 
+         `Ratios: (127) / (126)`:`Ratios: (131) / (126)`) %>% 
+  dplyr::select(run, label, intensity, everything(), -file) %>% 
+  mutate(condition = c(0,20,40,60,80)[match(label,names(protRaw)[16:20])],
+         intensity = as.numeric(intensity)) %>% 
+  dplyr::rename(Uniprot = Accession) %>% 
+  unite(cell, c('run','label','condition'), remove = F) %>%
+  dplyr::select(cell, run, label, condition, Uniprot, intensity)
+
+protTidy <- protTidy[-grep("_",protTidy$Uniprot),]
+```
+
+## Data Normalization
+```{r }
+protTidy <- protTidy %>% group_by(Uniprot) %>% mutate(intensity = intensity / median(intensity, na.rm = TRUE)) %>%
+  group_by(cell) %>% mutate(intensity = intensity / median(intensity, na.rm = TRUE)) %>% ungroup()
+```
+
+
+## Impute data
+```{r}
+protImpute <- protTidy %>% dplyr::select(run,condition,Uniprot,intensity) %>%
+  unite(col = "cell", run:condition) %>%
+  pivot_wider(names_from = cell, values_from = intensity) %>%
+  kNN(data = ., k = 1) %>% as_tibble() %>% dplyr::select(Uniprot:e_80)
+
+protVar <- protImpute %>% gather(key = 'cell', value = 'abundance', 2:ncol(protImpute)) %>%
+  separate(cell, into = c('run','label'), remove = F) %>% 
+  filter(run != 'ctrl') %>% group_by(Uniprot) %>%
+  summarise(var = var(abundance),
+            sd = sd(abundance),
+            mean = mean(abundance),
+            cv = sd / mean)
+
+
+ggplot(protVar, aes(x = sd)) + geom_histogram(bins = 50) + theme_bw()
+ggplot(protVar, aes(x = mean, y = cv)) + geom_point()
+```
+
+## OPTIONAL - Filter out proteins with variance less than control
+```{r}
+bio_vs_tech_var <- protImpute %>% gather(key = 'cell', value = 'abundance', 2:ncol(protImpute)) %>%
+  separate(cell, into = c('run','label'), remove = F) %>% 
+  mutate(bio = ifelse(run == "ctrl",
+                      "tech_var",
+                      "bio_var")) %>%
+  group_by(Uniprot, bio) %>%
+  summarise(cv = sd(abundance) / mean(abundance)) %>%
+  pivot_wider(names_from = bio, values_from = cv) %>%
+  mutate(keep = bio_var > tech_var)
+  
+ggplot(bio_vs_tech_var, aes(x = log2(bio_var / tech_var))) + geom_histogram(bins = 50) +
+  geom_vline(xintercept = 0)
+
+keep <- bio_vs_tech_var %>% filter(keep) %>% pull(Uniprot)
+```
+
+
+## Variance vs Mean
+```{r}
+ggplot(protVar, aes(x = log2(mean), y = var/mean^2)) + geom_point() + geom_smooth(method = lm, formula = y ~ poly(x, 2))
+```
+
+
+## Calculate variance and covariance
+```{r}
+cor = cor(t(log2(protImpute[c(1:ncol(protImpute))[-c(1,grep('ctrl',colnames(protImpute)))]])), use = 'pairwise.complete.obs')
+colnames(cor) = protImpute$Uniprot
+rownames(cor) = protImpute$Uniprot
+
+cov = cov(t(log2(protImpute[c(1:ncol(protImpute))[-c(1,grep('ctrl',colnames(protImpute)))]])), use = 'pairwise.complete.obs')
+colnames(cov) = protImpute$Uniprot
+rownames(cov) = protImpute$Uniprot
+
+
+mypal = rev(colorRampPalette(brewer.pal(11, 'RdBu'))(201))
+k = 2
+# map = pheatmap(cor, show_colnames = F, show_rownames = F, color = mypal, breaks = seq(-1,1, by = 0.01), cutree_cols = k, cutree_rows = k, legend = F)
+#map
+
+tibble(Uniprot = protImpute$Uniprot, Cluster = cutree(map$tree_row, k = k)) %>% write_csv('/Users/kylekovary/Downloads/Map.csv')
+```
+
+## PCA Analysis
+```{r}
+remove = which(is.na(pairs), arr.ind = T)[,1] %>% unique()
+pca = prcomp(protImpute[,2:ncol(protImpute)])
+
+pcaDF = tibble(cell = rownames(pca$rotation), PC1 = pca$rotation[,1], PC2 = pca$rotation[,2])
+pcaDF = pcaDF %>% separate(cell, into = c('run','label'), remove = F) %>% print()
+ggplot(pcaDF, aes(x = PC1, y = PC2, colour = run)) + geom_point(size = 5)
+```
+
+
+## Variance and Co-variance Between Cells After Cell Normalization
+
+```{r echo=TRUE, fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
+protTidy = protTidy %>% group_by(cell) %>% mutate(intensity = intensity / median(intensity, na.rm = T))
+
+# ggplot(protTidy, aes(log2(intensity), colour = cell)) + geom_density() + theme_bw() + xlim(-8,8)
+```
+
+```{r echo=TRUE, fig.height=10, fig.width=10,message=FALSE, warning=FALSE}
+pairs = protTidy %>% filter(condition == 'ctrl') %>% 
+  dplyr::select(cell, peptide, intensity) %>% spread(cell, intensity)
+
+# ggpairs(log2(pairs[,2:ncol(pairs)]), lower = list(continuous = wrap("points", alpha = 0.1, size = 0.1))) + theme_bw()
+```
+
+
+## Variance and Co-variance Between Cells After Peptide Batch Normalization
+
+```{r echo=TRUE, fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
+protTidy = protTidy %>% group_by(run, peptide) %>% 
+  mutate(intensity = intensity / median(intensity, na.rm = T)) %>% ungroup()
+ 
+# ggplot(protTidy, aes(log2(intensity), colour = cell)) + geom_density() + theme_bw() + xlim(-8,8)
+```
+
+```{r echo=TRUE, fig.height=10, fig.width=10,message=FALSE, warning=FALSE}
+pairs = protTidy %>% dplyr::filter(condition == 'ctrl') %>% 
+  dplyr::select(cell, peptide, intensity) %>% spread(cell, intensity)
+ 
+# ggpairs(log2(pairs[,2:ncol(pairs)]), lower = list(continuous = wrap("points", alpha = 0.1, size = 0.1))) + theme_bw()
+```
