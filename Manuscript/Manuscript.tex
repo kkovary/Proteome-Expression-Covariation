@@ -7,7 +7,7 @@
 %% http://rmflight.github.io/posts/2014/07/vignetteAnalysis.html).  
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\documentclass[11pt,twocolumn]{article}
+\documentclass[11pt,]{article}
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
 \usepackage{amssymb,amsmath}
@@ -30,6 +30,25 @@
 % use microtype if available
 \IfFileExists{microtype.sty}{\usepackage{microtype}}{}
 \usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+% Redefine \includegraphics so that, unless explicit options are
+% given, the image width will not exceed the width of the page.
+% Images get their normal width if they fit onto the page, but
+% are scaled down if they would overflow the margins.
+\makeatletter
+\def\ScaleIfNeeded{%
+  \ifdim\Gin@nat@width>\linewidth
+    \linewidth
+  \else
+    \Gin@nat@width
+  \fi
+}
+\makeatother
+\let\Oldincludegraphics\includegraphics
+{%
+ \catcode`\@=11\relax%
+ \gdef\includegraphics{\@ifnextchar[{\Oldincludegraphics}{\Oldincludegraphics[width=\ScaleIfNeeded]}}%
+}%
 \ifxetex
   \usepackage[setpagesize=false, % page size defined by xetex
               unicode=false, % unicode breaks when used with xetex
@@ -187,18 +206,18 @@ accurate control of active complexes or metabolic pathway activity.
 \hypertarget{introduction}{%
 \section{Introduction}\label{introduction}}
 
-The coordinated expression of proteins is vital across cellular
-function, from maintaining a dynamic steady state to differentiation of
-cells into specialized types in different tissues. The ability to
-regulate coordinated expression has been demonstrated to occur via
-transcription (transcription factors, chromatin regulation), translation
-(specialized ribosomes, mRNA structure/modifications), and degradation
-(E3 ligases). These processes, as well as the molecules they target, are
-all subject to noise, which has been shown to lead to differences in
-cell behavior and decisions in otherwise identical cells. Variability
-and coordinated expression (correlation) of proteins leads to increased
-population level control in binary decisions, and a decreased ability to
-execute analog signaling.
+The coordinated expression of proteins is vital for many aspects of
+cellular function, from maintaining a dynamic steady state to
+differentiation of cells into specialized types in different tissues.
+The ability to regulate coordinated expression has been demonstrated to
+occur via transcription (transcription factors, chromatin regulation),
+translation (specialized ribosomes, mRNA structure/modifications), and
+degradation (E3 ligases). These processes, as well as the molecules they
+target, are all subject to noise, which has been shown to lead to
+differences in cell behavior and decisions in otherwise identical cells.
+Variability and coordinated expression (correlation) of proteins leads
+to increased population level control in binary decisions, and a
+decreased ability to execute analog signaling.
 
 Despite these important insights, a global understanding of the
 variability of protein expression between single cells and the
@@ -229,11 +248,6 @@ though stoichiometric control. Though this kind of coordinated
 expression leads to an increase in variance in a population of cells, it
 can reduce variation within a cell.
 
-To fetch bibliographic metadata automatically from the web. For example,
-citing a paper can be as easy as providing its DOI (Clark and Gelfand,
-2006) or even just a few keywords (Ahrends et al., 2014; Shi et al.,
-2017).
-
 \hypertarget{results}{%
 \section{Results}\label{results}}
 
@@ -242,23 +256,43 @@ citing a paper can be as easy as providing its DOI (Clark and Gelfand,
 variability and coordinated expression between protein
 pairs.}\label{single-cell-proteomics-reveals-global-protein-expression-variability-and-coordinated-expression-between-protein-pairs.}}
 
-Activated Xenopus laevis eggs were collected at 5 time points across the
-first cell cycle (0, 20, 40, 60, and 80 minutes), with 5 eggs at each
-time point. Using TMT multiplexing and mass spectrometry, we were able
-to determine the relative abundance of more than 1300 proteins.
-Expression of these proteins were largely invariant across the cell
-cycle, revealing that these highly expressed genes are likely not
-regulated by cell cycle processes. Additionally, a PCA analysis of these
-eggs showed no discernible clustering on cell cycle time (Fig S1).
+The specific requirments for coordinated protein expression of pathways
+or complexes can vary, with some requiring strict stoichiometric
+regulation with others having much more relaxed requirements. Strict
+stoichiometry scenerios require coordinated expression of proteins
+(Figure 1A, top), and others can have uncoordinated expression (Figure
+1A bottom). At the single cell level, coordinated expression will result
+in a high correlation coefficient, whereas un-coordinated expression
+will result in a low correlation coefficient (Figure 1B). Even when the
+expression variation (standard deviation or coefficient of variation)
+and abundance is identical between these two scenerios, the total
+variance of a pathway or complex can be significantly different due to
+the variance sum law:
+\(var\left(\sum_{i=1}^n X_{i}\right) = \sum_{i=1}^{n} var(X_{i}) + 2\sum_{i,j:i<j}^{n} cov(X_{i},X_{j})\)
+(Figure 1C). Our previous work has shown that this effect is important
+in single cell pathway activation dynamics (Kovary et al., 2018).
+
+In order to study the relationship between protein expression variance
+and coexpression (correlated expression) of cellular pathways and
+complexes at the proteome level, we utilized \emph{Xenopus laevis} eggs
+as a single cell model. Activated \emph{Xenopus laevis} eggs were
+collected at 5 time points across the first cell cycle (0, 20, 40, 60,
+and 80 minutes), with 5 eggs at each time point. Using TMT multiplexing
+and mass spectrometry, we were able to determine the relative abundance
+of more than 1300 proteins. Expression of these proteins were largely
+invariant across the cell cycle, revealing that these highly expressed
+genes are likely not regulated by cell cycle processes. Additionally, a
+PCA analysis of these eggs showed no discernible clustering on cell
+cycle time (Fig S1).
 
 To determine the variance across these proteins, we calculated the
-coefficient of variation (CV) using all time points collected. This
-showed a wide range of variation containing multiple distributions (Fig
-1B), many of which are consistent with our previous study of variation
-using targeted mass spectrometry (Fig S2). In order to see if variation
-was a regulated process, we grouped the protein variation by gene
-ontology terms (GO terms) and plotted them in ranked order. We saw that
-in general, processes xxx were\ldots{}
+variance and coefficient of variation (CV) using all time points
+collected. This showed a wide range of variation containing multiple
+distributions (Fig 1D), many of which are consistent with our previous
+study of variation using targeted mass spectrometry (Fig S2). In order
+to see if variation was a regulated process, we grouped the protein
+variation by gene ontology terms (GO terms) and plotted them in ranked
+order. We saw that in general, processes xxx were\ldots{}
 
 Since we were able to measure all of these proteins within single cells,
 we are able to calculate coordinated expression of protein pairs at
@@ -270,6 +304,17 @@ significant coregulation. However, there appear to be a significant
 number of protein pairs containing high correlation coefficients, and
 the heatmap showed a lot of clustering of these highly coregulated pairs
 (Fig 1D).
+
+\begin{figure}
+\centering
+\includegraphics{output/figures/figure_1-1.pdf}
+\caption{A) Simulated expression of two proteins over time in a single
+cell with a mean of 100 and a standard deviation of 30 with expression
+correlations of 0 and 0.8. B) Pairwise plots of the two proteins in the
+single cells between uncorrelated and correlated scenerios. C) The total
+variance between the uncorrelated and correlated scenerios from A and
+B.}
+\end{figure}
 
 \hypertarget{protein-modules-display-different-levels-of-regulation-of-noise-and-co-expression-of-constituents}{%
 \subsection{Protein modules display different levels of regulation of
@@ -294,8 +339,6 @@ Variance Sum Law --- Dependent Case
 
 The sum of variance for a group of proteins \(X_{1},\dotsc,X_{n}\) with
 dependent relationships:
-
-\[var\left(\sum_{i=1}^n X_{i}\right) = \sum_{i=1}^{n} var(X_{i}) + 2\sum_{i,j:i<j}^{n} cov(X_{i},X_{j})\]
 
 \[\sigma_{{}_{total}} = \sqrt{var\left(\sum_{i=1}^n X_{i}\right)}\]
 
@@ -435,21 +478,10 @@ the Gower's distance between the proteome vectors.
 \section{References}\label{references}}
 
 \hypertarget{refs}{}
-\leavevmode\hypertarget{ref-ahrends2014controlling}{}%
-Ahrends, R., Ota, A., Kovary, K.M., Kudo, T., Park, B.O., and Teruel,
-M.N. (2014). Controlling low rates of cell differentiation through noise
-and ultrahigh feedback. Science \emph{344}, 1384--1389.
-
-\leavevmode\hypertarget{ref-Clark_2006}{}%
-Clark, J.S., and Gelfand, A.E. (2006). A future for models and data in
-environmental science. Trends in Ecology \& Evolution \emph{21},
-375--380.
-
-\leavevmode\hypertarget{ref-shi2017heterogeneous}{}%
-Shi, Z., Fujii, K., Kovary, K.M., Genuth, N.R., Röst, H.L., Teruel,
-M.N., and Barna, M. (2017). Heterogeneous ribosomes preferentially
-translate distinct subpools of mRNAs genome-wide. Molecular Cell
-\emph{67}, 71--83.e7.
+\leavevmode\hypertarget{ref-Kovary_2018}{}%
+Kovary, K.M., Taylor, B., Zhao, M.L., and Teruel, M.N. (2018).
+Expression variation and covariation impair analog and enable binary
+signaling control. Molecular Systems Biology \emph{14}.
 
 \eleft
 

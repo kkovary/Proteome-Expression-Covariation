@@ -409,8 +409,8 @@ groupCor <- function(x){
 totVarPair <- function(x){
   A <- as.character(x[1])
   B <- as.character(x[2])
-  varA <- as.numeric(protVar[protVar$Uniprot == A, 2])
-  varB <- as.numeric(protVar[protVar$Uniprot == B, 2])
+  varA <- as.numeric(protVar[protVar$Uniprot == A, 3])
+  varB <- as.numeric(protVar[protVar$Uniprot == B, 3])
   corAB <- cor[A,B]
   tot <- varA^2 + varB^2 + 2*corAB*varA*varB
   return(tot)
