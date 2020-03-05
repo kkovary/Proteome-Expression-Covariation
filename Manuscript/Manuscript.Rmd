@@ -241,11 +241,13 @@ cor = cor(t(log2(protImpute[c(1:ncol(protImpute))[-c(1,grep('ctrl',colnames(prot
 colnames(cor) = protImpute$Uniprot
 rownames(cor) = protImpute$Uniprot
 
-mypal = rev(colorRampPalette(brewer.pal(11, 'RdBu'))(201))
+p6 <- tibble(R = as_vector(cor[lower.tri(cor)])) %>%
+  ggplot(., aes(x = R)) + geom_histogram(bins = 1000) + xlim(-1,1) +
+  theme_minimal()
 
-p6 <- as.ggplot(
+p7 <- as.ggplot(
   Heatmap(cor, 
-        col = mypal,
+        col = rev(colorRampPalette(brewer.pal(11, 'RdBu'))(201)),
         heatmap_legend_param = list(title = "R"),
         show_column_dend = FALSE,
         show_row_dend = FALSE,
@@ -261,7 +263,7 @@ p6 <- as.ggplot(
 # 
 # pp1 / pp2 + plot_annotation(tag_levels = "A") & theme(legend.position = "none")
 
-(p1 / (p3 + p4)) / (p5 + p6) + 
+(p1 / (p3 + p4)) / (p5 + p6 | p7) + 
   plot_annotation(tag_levels = "A")
 
 fig_legend_1 <- c("A) Simulated expression of two proteins over time in a single cell with a mean of 100 and a standard deviation of 30 with expression correlations of 0 and 0.8. B) Pairwise plots of the two proteins in the single cells between uncorrelated and correlated scenerios. C) The total variance between the uncorrelated and correlated scenerios from A and B. D) Histogram of the coefficient of variation of all measured proteins. E) Heatmap of the pairwise correlation coefficients between all measured protein pairs.")
