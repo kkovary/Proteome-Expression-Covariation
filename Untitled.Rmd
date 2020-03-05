@@ -149,13 +149,13 @@ allGO <- protImpute %>% dplyr::select(Uniprot) %>% filter(Uniprot %in% keys) %>%
 ```
 
 ## Plots
-```{r fig.height=8, fig.width=5}
+```{r}
 allGO1 <- allGO1 %>% mutate(interval = cut_number(normVar, n = 10))
 
-ggplot(allGO1, aes(x = normVar)) + geom_histogram(bins = 50)
+ggplot(allGO1, aes(x = normVar)) + geom_histogram(bins = 100, aes(fill = interval))
 
 ggplot(allGO1, 
-       aes(x = medCors, y = medCV, color = interval == "[0.00652,0.0333]")) + 
+       aes(x = medCors, y = medCV, color = interval)) + 
   geom_point(alpha = 0.5) + theme_bw() +
   #facet_wrap(~interval) +
   theme(legend.position = "bottom")
@@ -164,7 +164,7 @@ ggplot(allGO1,
        aes(x = medCors, y = medCV)) + 
   geom_point(alpha = 0.5) + theme_bw() +
   geom_label_repel(data = filter(allGO1, 
-                                 interval == "[0.00652,0.0333]",
+                                 interval == "[0.142,0.38]",
                                  medCors > 0.15), 
                   aes(label = GO), 
                   colour = 'black', 
@@ -367,6 +367,11 @@ p4 <- tibble(cor = c("High Cor","Low Cor"),
 
 p1 / (p3 + p4) + plot_annotation(tag_levels = "A") & theme(legend.position = "none")
 
+n <- 2
+R <- 0.8
 
+model_tot_var <- function(n,R,v){
+  sqrt(n*v^2 + n*2*R*v^2)
+}
 
 ```

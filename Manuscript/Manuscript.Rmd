@@ -49,7 +49,8 @@ abstract: Protein expression variation leads to phenotypic variance between cell
 library(knitr)
 library(tidyverse)
 library(RColorBrewer)
-library(pheatmap)
+#library(pheatmap)
+library(ComplexHeatmap)
 library(GGally)
 library(VIM)
 library(org.Xl.eg.db)
@@ -60,6 +61,7 @@ library(cowplot)
 library(patchwork)
 source("../functions.R")
 library(knitcitations)
+library(ggplotify)
 
 cleanbib()   
 cite_options(citation_format = "pandoc")
@@ -192,7 +194,7 @@ To determine the variance across these proteins, we calculated the variance and 
 
 Since we were able to measure all of these proteins within single cells, we are able to calculate coordinated expression of protein pairs at single cell resolution. Using Pearson correlation coefficient, we could determine coordinated expression of nearly 2 million protein pairs (Fig 1C) The distribution of correlation coefficients fit a normal distribution, with the majority of protein pairs appearing to not show significant coregulation. However, there appear to be a significant number of protein pairs containing high correlation coefficients, and the heatmap showed a lot of clustering of these highly coregulated pairs (Fig 1D).
 
-```{r figure_1, echo=FALSE, fig.height=6.5, fig.width=6.5, message=FALSE, warning=FALSE, fig.cap=fig_legend_1}
+```{r figure_1, echo=FALSE, fig.height=8, fig.width=6, message=FALSE, warning=FALSE, fig.cap=fig_legend_1}
 
 set.seed(41)
 
@@ -208,25 +210,50 @@ p1 <- rbind(low_cor, high_cor) %>% pivot_longer(ProtA:ProtB, names_to = "protein
   ggplot(., aes(x = time, y = abundance, color = protein)) + geom_path() +
   facet_wrap(~cor, ncol = 1) +
   theme_minimal() +
-  theme(legend.position = "bottom")
+  theme(legend.position = "none")
 
 p2 <- rbind(low_cor, high_cor) %>% pivot_longer(ProtA:ProtB, names_to = "protein", values_to = "abundance") %>%
   ggplot(., aes(x = protein, y = abundance, color = protein)) + 
   geom_boxplot() + facet_wrap(~cor, ncol = 1) +
   theme_minimal() +
-  theme(legend.position = "bottom")
+  theme(legend.position = "none")
 
 p3 <- rbind(low_cor, high_cor) %>%
   ggplot(., aes(x = ProtA, y = ProtB, color = cor)) + geom_point() +
   stat_ellipse() +
   theme_minimal() +
-  theme(legend.position = "bottom")
+  theme(legend.position = "none")
 
 p4 <- tibble(cor = c("High Cor","Low Cor"),
        var_sum = c(sqrt(30^2 + 30^2 + 2*0.8*30^2),
                    sqrt(30^2 + 30^2 + 2*0*30^2))) %>%
   ggplot(., aes(x = cor, y = var_sum, fill = cor)) + geom_bar(stat = "identity") +
-  theme_minimal()
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Variation histogram
+p5 <- ggplot(protVar, aes(x = cv)) + 
+  geom_histogram(bins = 200) + xlim(0,.8) + theme_minimal() +
+  theme(legend.position = "none")
+
+# Correlation matrix
+cor = cor(t(log2(protImpute[c(1:ncol(protImpute))[-c(1,grep('ctrl',colnames(protImpute)))]])), use = 'pairwise.complete.obs')
+colnames(cor) = protImpute$Uniprot
+rownames(cor) = protImpute$Uniprot
+
+mypal = rev(colorRampPalette(brewer.pal(11, 'RdBu'))(201))
+
+p6 <- as.ggplot(
+  Heatmap(cor, 
+        col = mypal,
+        heatmap_legend_param = list(title = "R"),
+        show_column_dend = FALSE,
+        show_row_dend = FALSE,
+        show_column_names = FALSE,
+        show_row_names = FALSE,
+        use_raster = TRUE,
+        raster_quality = 1)
+  )
 
 
 # pp1 <- p1 + p2 + plot_layout(widths = c(3,1))
@@ -234,9 +261,10 @@ p4 <- tibble(cor = c("High Cor","Low Cor"),
 # 
 # pp1 / pp2 + plot_annotation(tag_levels = "A") & theme(legend.position = "none")
 
-p1 / (p3 + p4) + plot_annotation(tag_levels = "A") & theme(legend.position = "none")
+(p1 / (p3 + p4)) / (p5 + p6) + 
+  plot_annotation(tag_levels = "A")
 
-fig_legend_1 <- c("A) Simulated expression of two proteins over time in a single cell with a mean of 100 and a standard deviation of 30 with expression correlations of 0 and 0.8. B) Pairwise plots of the two proteins in the single cells between uncorrelated and correlated scenerios. C) The total variance between the uncorrelated and correlated scenerios from A and B.")
+fig_legend_1 <- c("A) Simulated expression of two proteins over time in a single cell with a mean of 100 and a standard deviation of 30 with expression correlations of 0 and 0.8. B) Pairwise plots of the two proteins in the single cells between uncorrelated and correlated scenerios. C) The total variance between the uncorrelated and correlated scenerios from A and B. D) Histogram of the coefficient of variation of all measured proteins. E) Heatmap of the pairwise correlation coefficients between all measured protein pairs.")
 
 ```
 
