@@ -247,7 +247,7 @@ allKEGG <- allKEGG %>%
                              normVar = totVar / n) %>% ungroup() %>%
   mutate(interval = cut_number(normVar, n = 4))
 
-ggplot(allKEGG, aes(x = corSkew, y = medCV)) + geom_point(aes(color = interval)) +
+ggplot(allKEGG, aes(x = medCors, y = medCV)) + geom_point(aes(color = interval)) +
   geom_label_repel(data = allKEGG, 
                   aes(label = KEGG_name), 
                   colour = 'black', 
@@ -306,8 +306,7 @@ plot_grid(p1,p2, ncol = 1,
           align = 'v')
 
 p1/p2 + 
-  plot_annotation(title = "Glycolysis",
-                  tag_levels = "A") +
+  plot_annotation(tag_levels = "A") +
   plot_layout(heights = c(2,1))
 
 # pathview(genes, 
@@ -319,7 +318,6 @@ p1/p2 +
 #          high = list(gene = 'red'),
 #          limit = list(gene = c(-2,2))
 # )
-  p1
 ```
 
 

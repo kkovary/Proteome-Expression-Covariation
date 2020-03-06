@@ -62,6 +62,7 @@ library(patchwork)
 source("../functions.R")
 library(knitcitations)
 library(ggplotify)
+library(latex2exp)
 
 cleanbib()   
 cite_options(citation_format = "pandoc")
@@ -282,12 +283,66 @@ Variance Sum Law — Dependent Case
 
 The sum of variance for a group of proteins $X_{1},\dotsc,X_{n}$ with dependent relationships:
 
+$$var\left(\sum_{i=1}^n X_{i}\right) = \sum_{i=1}^{n} var(X_{i}) + 2\sum_{i,j:i<j}^{n} cov(X_{i},X_{j})$$
+
+$$\sigma_{{}_{total}} = \sum_{i=1}^{n} \sigma_{X_{i}}^2 + 2\sum_{i,j:i<j}^{n} \rho(X_{i},X_{j})\sigma_{X_i}\sigma_{X_j}$$
 
 
 $$\sigma_{{}_{total}} = \sqrt{var\left(\sum_{i=1}^n X_{i}\right)}$$
 
 $$\sigma_{{}_{norm}} = \dfrac{\sigma_{{}_{total}}}{n}$$
 
+$$
+R =
+\begin{bmatrix} 
+\rho_{11} & \rho_{12} & \cdots & \rho_{1p} \\
+\rho_{21} & \rho_{22} & \cdots & \rho_{2p} \\
+\vdots & \vdots & \ddots & \vdots \\
+\rho_{p1} & \rho_{p2} & \cdots & \rho_{pp}
+\end{bmatrix}
+$$
+
+```{r}
+library(magick)
+
+cowplot::ggdraw() + cowplot::draw_image(magick::image_read_pdf("../images/preview.pdf", density = 600))
+
+```
+
+
+$$
+\begin{bmatrix}
+\sigma(X_{1}) \\
+\sigma(X_{1}) \\
+\sigma(X_{1}) \\
+\vdots \\
+\sigma(X_{i}) \\
+\end{bmatrix}^2
++
+\begin{bmatrix} 
+\rho(X_1,X_2) \\
+\rho(X_1,X_3) \\
+\rho(X_1,X_4) \\
+\vdots \\
+\rho(X_i,X_j)
+\end{bmatrix}
+
+\begin{bmatrix}
+\sigma(X_{1}) \\
+\sigma(X_{1}) \\
+\sigma(X_{1}) \\
+\vdots \\
+\sigma(X_{i}) \\
+\end{bmatrix}
+
+\begin{bmatrix}
+\sigma(X_{2}) \\
+\sigma(X_{3}) \\
+\sigma(X_{4}) \\
+\vdots \\
+\sigma(X_{j}) \\
+\end{bmatrix}
+ $$
 
 When calculating the total variance of a pathway or general group of proteins, the total variance is the square root of the sums of the squares of the coefficient of variance. However, if any of the proteins are correlated in expression, an extra term must be added to account for this correlation. This means that if a group of proteins have a positive correlation, then the total variance will be higher than if there was no correlation. In order to study how variance and coordinated expression are related between single cells, we wanted to calculate a normalized total variance metric. Since we were not interested in the increase of variance due to the number of proteins in a module, we calculated the total variance using the coefficient of variation and correlation coefficients and normalize to the total number of proteins in the module. When total variance is plotted against the number of proteins, there is a clear linear relationship between the two. Once we normalize to the total number of proteins this relationship is lost and we are left with the effects of coefficient of variation and correlation.
 
