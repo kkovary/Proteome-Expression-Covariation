@@ -63,6 +63,7 @@ source("../functions.R")
 library(knitcitations)
 library(ggplotify)
 library(latex2exp)
+library(KEGG.db)
 
 cleanbib()   
 cite_options(citation_format = "pandoc")
@@ -163,6 +164,123 @@ cov = cov(t(log2(protImpute[c(1:ncol(protImpute))[-c(1,grep('ctrl',colnames(prot
 colnames(cov) = protImpute$Uniprot
 rownames(cov) = protImpute$Uniprot
 ```
+
+```{r group_prots, include=FALSE}
+# GO Terms
+GO <- protImpute %>% dplyr::select(Uniprot) %>% filter(Uniprot %in% keys) %>% 
+  mutate(GOterms = mapIds(org.Xl.eg.db, 
+                     keys = Uniprot, 
+                     keytype = 'UNIPROT', 
+                     column = 'GOALL', 
+                     multiVals = 'list'))
+
+allGO <- unnest(GO, cols = GOterms) %>% nest(Uniprot = Uniprot) %>%
+  rowwise() %>% mutate(n = length(unlist(Uniprot))) %>% ungroup() %>%
+  mutate(name = mapIds(GO.db, 
+                     keys = GOterms, 
+                     keytype = 'GOID', 
+                     column = 'TERM') %>% as.character(),
+         ontology = mapIds(GO.db, 
+                     keys = GOterms, 
+                     keytype = 'GOID', 
+                     column = 'ONTOLOGY') %>% as.character(),
+         type = "GO") %>%
+  rename(accession = GOterms) %>%
+  dplyr::select(type, accession, name, ontology, everything())
+
+# KEGG Pathways
+kegg <- plyr::ldply(as.list(org.Xl.egPATH2EG),data.frame) %>% as_tibble() %>%
+  rename(kegg_id = ".id", gene_id = "X..i..")
+
+kegg_names <- plyr::ldply(as.list(KEGGPATHNAME2ID),data.frame) %>%
+  rename(kegg_name = ".id",
+         kegg_id = "X..i..")
+
+kegg <- protImpute %>% dplyr::select(Uniprot) %>% filter(Uniprot %in% keys) %>% 
+  mutate(KEGG = mapIds(org.Xl.eg.db, 
+                     keys = Uniprot, 
+                     keytype = 'UNIPROT', 
+                     column = "PATH", 
+                     multiVals = 'list'))
+
+allKEGG <- unnest(kegg, cols = KEGG) %>% nest(Uniprot = Uniprot) %>%
+  rowwise() %>% mutate(n = length(unlist(Uniprot))) %>% ungroup() %>%
+  mutate(name = kegg_names$kegg_name[match(KEGG,kegg_names$kegg_id)],
+         type = "KEGG",
+         ontology = NA) %>% rename(accession = KEGG) %>%
+  dplyr::select(type, accession, name, ontology, Uniprot, n)
+
+
+
+allGroups <- rbind(allGO, allKEGG)
+
+# Calculate summary variables
+corVector <- function(uniprotList, corMat){
+  targets = uniprotList %>% unlist()
+  temp = corMat[rownames(corMat) %in% targets,colnames(corMat) %in% targets]
+  temp[lower.tri(temp, diag = F)]
+}
+
+selectCV <- function(x){
+  protVar %>% filter(Uniprot %in% unlist(x)) %>% 
+    dplyr::select(cv) %>% as_tibble() %>% as.list()
+}
+
+allGroups <- allGroups %>% group_by(accession) %>% 
+  dplyr::mutate(cors = corVector(Uniprot, cor) %>% as_tibble() %>% as.list(),
+                covs = corVector(Uniprot, cov) %>% as_tibble() %>% as.list(),
+                cv = selectCV(Uniprot)) %>% ungroup() %>%
+  rowwise() %>% mutate(medCors = mean(cors, na.rm = TRUE),
+                       medCV = mean(cv, na.rm = TRUE)) %>%
+  ungroup() %>%
+filter(n > 3,
+       !is.na(medCors),
+       !is.na(medCV))
+
+
+```
+
+```{r total_var, include=FALSE}
+groupCor <- function(x){
+  geneList <- unlist(x)
+  
+  if (length(geneList) > 1) {
+    protCombs <- t(combn(geneList, 2))
+    return(sqrt(sum(totVarPair(protCombs))))
+  } else{
+    return(as.numeric(protVar[protVar$Uniprot == geneList[1], 2]))
+  }
+}
+
+totVarPair <- function(x){
+  A <- as.character(x[1])
+  B <- as.character(x[2])
+  varA <- as.numeric(protVar[protVar$Uniprot == A, 3])
+  varB <- as.numeric(protVar[protVar$Uniprot == B, 3])
+  corAB <- cor[A,B]
+  tot <- varA^2 + varB^2 + 2*corAB*varA*varB
+  return(tot)
+}
+
+totVarGroup <- function(x){
+  geneList <- unlist(x)
+  
+  if (length(geneList) > 1) {
+    protCombs <- t(combn(geneList, 2))
+    return(sqrt(sum(apply(protCombs, 1, function(x) totVarPair(x)))))
+    #return(sqrt(sum(totVarPair(protCombs))))
+  } else{
+    return(as.numeric(protVar[protVar$Uniprot == geneList[1], 2]))
+  }
+  
+}
+
+allGroups <- allGroups %>% filter(!is.na(accession)) %>% rowwise() %>%
+  mutate(totVar = totVarGroup(Uniprot),
+         normVar = totVar / n) %>%
+  filter(n > 3) %>% ungroup()
+```
+
 
 *Keywords*: single cell, proteomics, stochasticity
 
@@ -275,6 +393,28 @@ fig_legend_1 <- c("A) Simulated expression of two proteins over time in a single
 ## Protein modules display different levels of regulation of noise and co-expression of constituents
 
 To investigate whether coordinated expression goes beyond just protein pairs, we wanted to see if pathways, complexes, and other modules had proteins that with coordinated expression. To answer this question, we grouped proteins by GO terms and calculated the median correlation coefficient across all pairs of proteins within the term. When the ranked media correlation is plotted it’s clear that there are a significant number of GO terms with higher than expected levels of coordinate expression.
+
+```{r figure_2,, echo=FALSE, fig.height=8, fig.width=6, message=FALSE, warning=FALSE, fig.cap=fig_legend_2}
+allGroups <- allGroups %>% mutate(interval = cut_number(normVar, n = 10)) %>%
+  mutate(interval = ifelse(interval == levels(interval)[1],
+                           "low",
+                           ifelse(interval == levels(interval)[10],
+                                  "high",
+                                  "mid")))
+
+ggplot(allGroups, aes(x = normVar)) + geom_histogram(bins = 100, aes(fill = interval)) + theme_minimal() +
+  #scale_fill_viridis_d()
+  scale_fill_brewer(palette = "PiYG")
+
+ggplot(allGroups, aes(x = medCors, y = medCV, color = interval)) + 
+  geom_point() + 
+  theme_minimal()
+  
+
+
+#fig_legend_2 <- c("A) ")
+```
+
 
 ## Total variance metric reveals certain modules enforce a tradeoff between protein co-expression and noise
 
