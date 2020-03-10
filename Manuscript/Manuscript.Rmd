@@ -326,8 +326,12 @@ high_cor <- high_cor %>% as_tibble() %>% mutate(cor = "high_cor", time = 1:nrow(
   rename(ProtA = "V1", ProtB = "V2")
 
 p1 <- rbind(low_cor, high_cor) %>% pivot_longer(ProtA:ProtB, names_to = "protein", values_to = "abundance") %>%
-  ggplot(., aes(x = time, y = abundance, color = protein)) + geom_path() +
+  ggplot(., aes(x = time, y = abundance, color = protein)) + 
+  #annotate("rect", xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, aes(fill = cor)) +
+  #geom_rect(xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, aes(fill = cor, color = NA), alpha = 0.002) +
+  geom_path() +
   facet_wrap(~cor, ncol = 1) +
+  scale_color_manual(values = c("#d53e4f","#3288bd")) +
   theme_minimal() +
   theme(legend.position = "none")
 
@@ -339,6 +343,7 @@ p2 <- rbind(low_cor, high_cor) %>% pivot_longer(ProtA:ProtB, names_to = "protein
 
 p3 <- rbind(low_cor, high_cor) %>%
   ggplot(., aes(x = ProtA, y = ProtB, color = cor)) + geom_point() +
+  scale_color_manual(values = c("#d53e4f","#3288bd")) +
   stat_ellipse() +
   theme_minimal() +
   theme(legend.position = "none")
@@ -347,6 +352,7 @@ p4 <- tibble(cor = c("High Cor","Low Cor"),
        var_sum = c(sqrt(30^2 + 30^2 + 2*0.8*30^2),
                    sqrt(30^2 + 30^2 + 2*0*30^2))) %>%
   ggplot(., aes(x = cor, y = var_sum, fill = cor)) + geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("#d53e4f","#3288bd")) +
   theme_minimal() +
   theme(legend.position = "none")
 
