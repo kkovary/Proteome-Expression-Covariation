@@ -430,17 +430,25 @@ fig_legend_1 <- c("A) Simulated expression of two proteins over time in a single
 
 ```
 
+## Total variance metric reveals certain modules enforce a trade-off between protein co-expression and noise
 
-## Protein modules display different levels of regulation of noise and co-expression of constituents
+The sum of variance for a group of proteins $X_{1},\dotsc,X_{n}$ with dependent relationships:
 
-In order to see if variation was a regulated process, we grouped the protein variation by gene ontology terms (GO terms) and plotted them in ranked order. We saw that in general, processes xxx were…
+$$\sigma_{{}_{total}}^2 = \sum_{i=1}^{n} \sigma_{X_{i}}^2 + 2\sum_{i,j:i<j}^{n} \rho(X_{i},X_{j})\sigma_{X_i}\sigma_{X_j}$$
 
-To investigate whether coordinated expression goes beyond just protein pairs, we wanted to see if pathways, complexes, and other modules had proteins that with coordinated expression. To answer this question, we grouped proteins by GO terms and calculated the median correlation coefficient across all pairs of proteins within the term. When the ranked media correlation is plotted it’s clear that there are a significant number of GO terms with higher than expected levels of coordinate expression.
+$$\sigma_{{}_{norm}} = \dfrac{\sqrt{\sigma_{{}_{total}}}}{n}$$
+
+
+
+When calculating the total variance of a pathway or general group of proteins, the total variance is the square root of the sums of the squares of the coefficient of variance. However, if any of the proteins are correlated in expression, an extra term must be added to account for this correlation. This means that if a group of proteins have a positive correlation, then the total variance will be higher than if there was no correlation. In order to study how variance and coordinated expression are related between single cells, we wanted to calculate a normalized total variance metric. Since we were not interested in the increase of variance due to the number of proteins in a module, we calculated the total variance using the coefficient of variation and correlation coefficients and normalize to the total number of proteins in the module. When total variance is plotted against the number of proteins, there is a clear linear relationship between the two. Once we normalize to the total number of proteins this relationship is lost and we are left with the effects of coefficient of variation and correlation.
+
 
 ```{r figure_2, echo=FALSE, fig.height=7, fig.width=6, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_2}
 p1 <- ggplot(allGroups, aes(x = normVar, fill = interval)) + 
-  geom_histogram(bins = 50) + theme_minimal() +
-  #scale_fill_viridis_d()
+  geom_histogram(data = filter(allGroups, interval == "mid"),bins = 50) + 
+  geom_histogram(data = filter(allGroups, interval == "low"),bins = 50) + 
+  geom_histogram(data = filter(allGroups, interval == "high"),bins = 50) + 
+  theme_minimal() +
   scale_fill_manual(values = c("#d53e4f","#3288bd","grey")) +
   xlab("Normalized Variation") + ylab("Number") +
   theme(legend.position = "none")
@@ -511,35 +519,44 @@ left <- (p1 / p3 / p4) + plot_layout(ncol = 1)
 wrap_plots(left, p2) + plot_layout(widths = c(1,3)) +
   plot_annotation(tag_levels = "A")
 
-#p1 + p2 + p3 + plot_annotation(tag_levels = "A")
-
 fig_legend_2 <- c("A) Histogram of the normalized variation values across all of the GO terms and KEGG pathways. The bottom and top ~15% are colored blue and red respectively. B) Distributions of the mean correlation coefficient across all groups of proteins. Both the top and bottom 15% of normalized variation groups had peaks of high levels of mean correlation coefficients. C) Distributions of the mean coefficient of variation across all groups of proteins. The top and bottom ~15% of normalized variation groups were largely separated. D) Pairwise plot between the mean correlation and mean coefficient of variation within each GO term and KEGG pathway with color coding from A. Interestingly, both the top and bottom 10% of normalized variation have groups of proteins with high levels of correlation, despite high correlation adding to total variance. In the lowest 10% of normalized variation groups there appears to be a negative correlation between mean correlation and variation.")
 
 ```
 
 
+## Protein modules display different levels of regulation of noise and co-expression of constituents
 
+In order to see if variation was a regulated process, we grouped the protein variation by gene ontology terms (GO terms) and plotted them in ranked order. We saw that in general, processes xxx were…
 
+To investigate whether coordinated expression goes beyond just protein pairs, we wanted to see if pathways, complexes, and other modules had proteins that with coordinated expression. To answer this question, we grouped proteins by GO terms and calculated the median correlation coefficient across all pairs of proteins within the term. When the ranked media correlation is plotted it’s clear that there are a significant number of GO terms with higher than expected levels of coordinate expression.
 
+```{r figure_3, echo=FALSE, fig.height=6, fig.width=7, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_3}
+plots <- 1:4
+for(i in 1:length(plots)){
+  assign(paste0("p",plots[i]), cor_rug_plot(interesting_groups_low[i], "#3288bd"))
+}
 
-## Total variance metric reveals certain modules enforce a trade-off between protein co-expression and noise
+plots <- 5:8
+for(i in 1:length(plots)){
+  assign(paste0("p",plots[i]), cor_rug_plot(interesting_groups_high[i], "#d53e4f"))
+}
 
-The sum of variance for a group of proteins $X_{1},\dotsc,X_{n}$ with dependent relationships:
+left <- p1 + p2 + p3 + p4 + plot_layout(nrow = 1)
 
-$$\sigma_{{}_{total}}^2 = \sum_{i=1}^{n} \sigma_{X_{i}}^2 + 2\sum_{i,j:i<j}^{n} \rho(X_{i},X_{j})\sigma_{X_i}\sigma_{X_j}$$
+right <- p5 + p6 + p7 + p8 + plot_layout(nrow = 1)
 
-$$\sigma_{{}_{norm}} = \dfrac{\sqrt{\sigma_{{}_{total}}}}{n}$$
+wrap_plots(left, right) + plot_annotation(tag_levels = "A") + plot_layout(nrow = 2)
 
+fig_legend_3 <- c("Density plots of correlation coefficients select protein groups color coded by low (blue) and high (red) normalized protein variance, with the distribution of all measured correlation coefficients colored in grey (rug plot to show the measured correlations coefficents shown on plot). Below each density plot is a box plot.")
+```
 
-
-When calculating the total variance of a pathway or general group of proteins, the total variance is the square root of the sums of the squares of the coefficient of variance. However, if any of the proteins are correlated in expression, an extra term must be added to account for this correlation. This means that if a group of proteins have a positive correlation, then the total variance will be higher than if there was no correlation. In order to study how variance and coordinated expression are related between single cells, we wanted to calculate a normalized total variance metric. Since we were not interested in the increase of variance due to the number of proteins in a module, we calculated the total variance using the coefficient of variation and correlation coefficients and normalize to the total number of proteins in the module. When total variance is plotted against the number of proteins, there is a clear linear relationship between the two. Once we normalize to the total number of proteins this relationship is lost and we are left with the effects of coefficient of variation and correlation.
 
 ## Low total variance modules are enriched for metabolic pathways and heteromeric protein complexes
 
 
 ## Enforcement of a trade-off between protein co-expression and noise increases efficiency of metabolic pathways and heteromeric protein complexes
 
-```{r figure_3, echo=FALSE, fig.height=6, fig.width=6, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_3}
+```{r figure_4, echo=FALSE, fig.height=6, fig.width=6, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_3}
 library(circlize)
 
 #allGroups[grep("large ribo",allGroups$name),]

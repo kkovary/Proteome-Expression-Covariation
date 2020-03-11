@@ -49,3 +49,8 @@ pca = prcomp(as.matrix(glyc[,2:ncol(glyc)]))
 pcaDF = tibble(PC1 = pca$rotation[,1], PC2 = pca$rotation[,2])
 ggplot(pcaDF, aes(x = PC1, y = PC2)) + geom_point()
 
+int <- matrix(data = c(0,1,0,
+                       0,0,1,
+                       1,0,0),
+              nrow = 3)
+mat <- cor[1:3,1:3]

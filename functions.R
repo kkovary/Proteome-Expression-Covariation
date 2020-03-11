@@ -38,9 +38,11 @@ cor_rug_plot <- function(x, color = '#e08214'){
   
   temp <- allGroups %>% select(name, cors) %>%
     unnest(cols = cors) %>% mutate(name = "all") %>%
+    filter(!duplicated(cors)) %>%
     rbind(temp,.)
   
-  p1 <- ggplot(temp, aes(x = cors, fill = name)) + geom_density(alpha = 0.75, color = "transparent") +
+  p1 <- ggplot(temp, aes(x = cors, fill = name)) + 
+    geom_density(alpha = 0.75, color = "transparent") +
     scale_fill_manual(values = c('#bababa',color), name = "") +
     geom_rug(data = filter(temp, name != "all"), color = color) +
     xlab("") + ylab("Density") +
