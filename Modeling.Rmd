@@ -58,10 +58,12 @@ corProts <- function(nProt, nCell, R, mean, sd) {
   cor_matrix =  matrix(data = R,
                        ncol = nProt,
                        nrow = nProt)
-  for (i in 1:nProt) {
-    cor_matrix[i, i] = 1
-  }
   
+  diag(cor_matrix) <- 1
+  # for (i in 1:nProt) {
+  #   cor_matrix[i, i] = 1
+  # }
+  # 
   list_distributions <- list()
   for (i in 1:nProt) {
     list_distributions <-
@@ -84,17 +86,20 @@ colnames(corVarMat) <- cors
 rownames(corVarMat) <- vars
 
 # Percent of potentially complete complexes
-for(i in 1:length(cors)){
-  for(j in 1:length(vars)){
+
+corVarMat <- sapply(1:length(cors), function(i) {
+  sapply(1:length(vars), function(j) {
     perc <- corProts(nProt = 10, nCell = 10000, R = cors[i], mean = 1000, sd = 1000*vars[j])
-    perc <- mean(apply(perc, 1, function(x) min(abs(x)) / max(abs(x))), na.rm = T)
-    corVarMat[j,i] <- perc
-  }
-}
+    mean(apply(perc, 1, function(x) min(abs(x)) / max(abs(x))), na.rm = T)
+    #corVarMat[j,i] <- perc
+  })
+})
+
+
 pheatmap(corVarMat, cluster_cols = F, cluster_rows = F)
 rotate <- function(x) t(apply(x, 2, rev))
 pheatmap(rotate(corVarMat), cluster_cols = F, cluster_rows = F)
-plot(diag(rotate(corVarMat)), rotate(corVarMat)[])
+#plot(diag(rotate(corVarMat)), rotate(corVarMat)[])
 
 x <- tibble(index = 1:51,
             diagnal = diag(corVarMat), 
@@ -104,12 +109,16 @@ x %>% gather(key = slice, value = percent, 2:4) %>%
   ggplot(., aes(x = index, y = percent, colour = slice)) + 
   geom_point() + geom_vline(xintercept = 40, linetype = 'dashed')
 
-x <- as_tibble(cbind(vars, corVarMat))
-x <- x %>% gather(key = R, value = percent, 2:ncol(x)) %>% mutate(R = as.numeric(R)) %>%
+x <- cbind(vars, corVarMat)
+colnames(x) <- c("vars",as.character(cors))
+x <- x %>% as_tibble() %>% gather(key = R, value = percent, 2:ncol(x)) %>% mutate(R = as.numeric(R)) %>%
   rename_(CV = vars)
-ggplot(x, aes(x = CV, y = percent, colour = R, group = as.factor(R))) + geom_path() + scale_x_reverse() + theme_bw()
+ggplot(x, aes(x = CV, y = percent, colour = R, group = as.factor(R))) + 
+  geom_path() + 
+  scale_x_reverse() + 
+  scale_color_viridis_c() +
+  theme_minimal()
 
-ggplot(x, aes(x = CV, y = percent, colour = as.factor(R))) + geom_path() + scale_x_reverse(limits = c(0.2,0)) + theme_bw()
 
 
 # Within cell variance
