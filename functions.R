@@ -50,17 +50,17 @@ cor_rug_plot <- function(x, color = '#e08214'){
     # theme(legend.position = c(.2,.9),
     #       legend.background = element_rect(fill="transparent")) +
     theme(legend.position = "none",
-          text = element_text(size = 6)) +
+          text = element_text(size = 4)) +
     xlim(-1,1) +
-    ggtitle(filter(temp, name != "all") %>% pull(name) %>% unique())
+    ggtitle(str_wrap(filter(temp, name != "all") %>% pull(name) %>% unique(), width = 20))
   
   p2 <- ggplot(temp, aes(x = name, y = cors, fill = name)) + 
-    geom_boxplot(notch = TRUE, alpha = 0.75) +
+    geom_boxplot(notch = TRUE, alpha = 0.75, outlier.size = 0.25) +
     scale_fill_manual(values = c('#bababa',color)) +
     ylab("Correlation Coefficients") +
     theme_minimal() +
     theme(legend.position = "none",
-          text = element_text(size = 6),
+          text = element_text(size = 4),
           axis.title.y=element_blank(),
           axis.text.y=element_blank(),
           axis.ticks.y=element_blank()) +

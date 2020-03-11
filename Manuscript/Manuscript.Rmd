@@ -338,6 +338,8 @@ To determine the variance across these proteins, we calculated the variance and 
 
 Since we were able to measure all of these proteins within single cells, we are able to calculate coordinated expression of protein pairs at single cell resolution. Using Pearson correlation coefficient, we could determine coordinated expression of nearly 2 million protein pairs (Fig 1F-G) The distribution of correlation coefficients fit a normal distribution, with the majority of protein pairs appearing to not show significant co-regulation. However, there appear to be a significant number of protein pairs containing high correlation coefficients, and the heat-map showed a lot of clustering of these highly co-regulated pairs (Fig 1G).
 
+\newpage
+
 ```{r figure_1, echo=FALSE, fig.height=4.5, fig.width=6, message=FALSE, warning=FALSE, fig.cap=fig_legend_1}
 allGroups <- readRDS("allGroups.RDS")
 
@@ -430,6 +432,8 @@ fig_legend_1 <- c("A) Simulated expression of two proteins over time in a single
 
 ```
 
+\newpage
+
 ## Total variance metric reveals certain modules enforce a trade-off between protein co-expression and noise
 
 The sum of variance for a group of proteins $X_{1},\dotsc,X_{n}$ with dependent relationships:
@@ -442,6 +446,7 @@ $$\sigma_{{}_{norm}} = \dfrac{\sqrt{\sigma_{{}_{total}}}}{n}$$
 
 When calculating the total variance of a pathway or general group of proteins, the total variance is the square root of the sums of the squares of the coefficient of variance. However, if any of the proteins are correlated in expression, an extra term must be added to account for this correlation. This means that if a group of proteins have a positive correlation, then the total variance will be higher than if there was no correlation. In order to study how variance and coordinated expression are related between single cells, we wanted to calculate a normalized total variance metric. Since we were not interested in the increase of variance due to the number of proteins in a module, we calculated the total variance using the coefficient of variation and correlation coefficients and normalize to the total number of proteins in the module. When total variance is plotted against the number of proteins, there is a clear linear relationship between the two. Once we normalize to the total number of proteins this relationship is lost and we are left with the effects of coefficient of variation and correlation.
 
+\newpage
 
 ```{r figure_2, echo=FALSE, fig.height=7, fig.width=6, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_2}
 p1 <- ggplot(allGroups, aes(x = normVar, fill = interval)) + 
@@ -523,12 +528,15 @@ fig_legend_2 <- c("A) Histogram of the normalized variation values across all of
 
 ```
 
+\newpage
 
 ## Protein modules display different levels of regulation of noise and co-expression of constituents
 
 In order to see if variation was a regulated process, we grouped the protein variation by gene ontology terms (GO terms) and plotted them in ranked order. We saw that in general, processes xxx were…
 
 To investigate whether coordinated expression goes beyond just protein pairs, we wanted to see if pathways, complexes, and other modules had proteins that with coordinated expression. To answer this question, we grouped proteins by GO terms and calculated the median correlation coefficient across all pairs of proteins within the term. When the ranked media correlation is plotted it’s clear that there are a significant number of GO terms with higher than expected levels of coordinate expression.
+
+\newpage
 
 ```{r figure_3, echo=FALSE, fig.height=4, fig.width=7, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_3}
 plots <- 1:4
@@ -552,13 +560,16 @@ wrap_plots(left, right) +
 fig_legend_3 <- c("Density plots of correlation coefficients select protein groups color coded by low (blue) and high (red) normalized protein variance, with the distribution of all measured correlation coefficients colored in grey (rug plot to show the measured correlations coefficents shown on plot). Below each density plot is a box plot.")
 ```
 
+\newpage
 
 ## Low total variance modules are enriched for metabolic pathways and heteromeric protein complexes
 
 
 ## Enforcement of a trade-off between protein co-expression and noise increases efficiency of metabolic pathways and heteromeric protein complexes
 
-```{r figure_4, echo=FALSE, fig.height=6, fig.width=6, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_3}
+\newpage
+
+```{r figure_4, echo=FALSE, fig.height=6, fig.width=6, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_4}
 library(circlize)
 
 #allGroups[grep("large ribo",allGroups$name),]
@@ -648,13 +659,17 @@ p3 <- as.ggplot(Heatmap(totVarMat,
         row_names_gp = gpar(fontsize = 5),
         column_names_gp = gpar(fontsize = 5)))
 
+p4 <- cowplot::ggdraw() + cowplot::draw_image(magick::image_read_svg("../images/complex_cartoon.svg"))
+
 bottom <- p2 + p3 + plot_layout(widths = c(1,2))
-(p1 + plot_spacer()) / bottom + 
+(p1 + p4) / bottom + 
   plot_annotation(tag_levels = "A")
 
 
-fig_legend_3 <- c("A) A representative heat-map of one of the low normalized variation groups with high levels of correlated proteins (Large ribosomal subunit). B) A simple model showing the percent of potentially assembled subunits of an idealized heteromeric 10 subunit complex. Both the variation of expression between the subunits as well as the coordinated expression between them can effect the percent of maximum assembled complexes. C) Heat-map showing the total variance as a function of coefficient of variation and correlation from the idealized model in B).")
+fig_legend_4 <- c("A) A representative heat-map of one of the low normalized variation groups with high levels of correlated proteins (Large ribosomal subunit). B) A simple model showing the percent of potentially assembled subunits of an idealized heteromeric 10 subunit complex. Both the variation of expression between the subunits as well as the coordinated expression between them can effect the percent of maximum assembled complexes. C) Heat-map showing the total variance as a function of coefficient of variation and correlation from the idealized model in B).")
 ```
+
+\newpage
 
 # Methods
 

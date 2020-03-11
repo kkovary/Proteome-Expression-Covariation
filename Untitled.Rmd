@@ -181,19 +181,19 @@ allGO[grep('large ribosomal subunit',allGO$GO),]
 glyc <- filter(allGO, GOterms == 'GO:0006096')$Uniprot %>% unlist()
 
 cor_rug_plot <- function(x){
-  temp <- filter(allGO, GOterms %in% x) %>%
-    dplyr::select(GO, cors) %>% unnest(cols = cors)
+  temp <- filter(allGroups, accession %in% x) %>%
+    dplyr::select(name, cors) %>% unnest(cols = cors)
   
-  temp <- allGO %>% select(GO, cors) %>%
-    unnest(cols = cors) %>% mutate(GO = "all") %>%
+  temp <- allGroups %>% select(name, cors) %>%
+    unnest(cols = cors) %>% mutate(name = "all") %>%
     rbind(temp,.)
   
-  ggplot(temp, aes(x = cors, fill = GO, color = GO)) +
+  ggplot(temp, aes(x = cors, fill = name, color = name)) +
     geom_density(alpha = 0.25) + 
-    geom_rug(data = filter(temp, GO != "all")) + 
+    geom_rug(data = filter(temp, name != "all")) + 
     theme_bw()
 }
-
+cor_rug_plot("GO:0006739")
 ```
 
 ## KEGG
