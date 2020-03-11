@@ -46,7 +46,7 @@ cor_rug_plot <- function(x, color = '#e08214'){
     scale_fill_manual(values = c('#bababa',color), name = "") +
     geom_rug(data = filter(temp, name != "all"), color = color) +
     xlab("") + ylab("Density") +
-    theme_bw() +
+    theme_minimal() +
     # theme(legend.position = c(.2,.9),
     #       legend.background = element_rect(fill="transparent")) +
     theme(legend.position = "none",
@@ -58,7 +58,7 @@ cor_rug_plot <- function(x, color = '#e08214'){
     geom_boxplot(notch = TRUE, alpha = 0.75) +
     scale_fill_manual(values = c('#bababa',color)) +
     ylab("Correlation Coefficients") +
-    theme_bw() +
+    theme_minimal() +
     theme(legend.position = "none",
           text = element_text(size = 6),
           axis.title.y=element_blank(),

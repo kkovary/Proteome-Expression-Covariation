@@ -530,7 +530,7 @@ In order to see if variation was a regulated process, we grouped the protein var
 
 To investigate whether coordinated expression goes beyond just protein pairs, we wanted to see if pathways, complexes, and other modules had proteins that with coordinated expression. To answer this question, we grouped proteins by GO terms and calculated the median correlation coefficient across all pairs of proteins within the term. When the ranked media correlation is plotted it’s clear that there are a significant number of GO terms with higher than expected levels of coordinate expression.
 
-```{r figure_3, echo=FALSE, fig.height=6, fig.width=7, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_3}
+```{r figure_3, echo=FALSE, fig.height=4, fig.width=7, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_3}
 plots <- 1:4
 for(i in 1:length(plots)){
   assign(paste0("p",plots[i]), cor_rug_plot(interesting_groups_low[i], "#3288bd"))
@@ -545,7 +545,9 @@ left <- p1 + p2 + p3 + p4 + plot_layout(nrow = 1)
 
 right <- p5 + p6 + p7 + p8 + plot_layout(nrow = 1)
 
-wrap_plots(left, right) + plot_annotation(tag_levels = "A") + plot_layout(nrow = 2)
+wrap_plots(left, right) + 
+  plot_annotation(tag_levels = "A") + 
+  plot_layout(nrow = 2)
 
 fig_legend_3 <- c("Density plots of correlation coefficients select protein groups color coded by low (blue) and high (red) normalized protein variance, with the distribution of all measured correlation coefficients colored in grey (rug plot to show the measured correlations coefficents shown on plot). Below each density plot is a box plot.")
 ```
