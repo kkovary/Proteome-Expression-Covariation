@@ -35,6 +35,9 @@ documentclass: article
 capsize: normalsize
 geometry: margin=1in
 fontsize: 11pt
+header-includes: 
+  \usepackage{float} \floatplacement{figure}{H} 
+  \newcommand{\beginsupplement}{\setcounter{table}{0}  \renewcommand{\thetable}{S\arabic{table}} \setcounter{figure}{0} \renewcommand{\thefigure}{S\arabic{figure}}}
 spacing: doublespacing
 bibliography: 
   - references.bib
@@ -64,6 +67,7 @@ library(knitcitations)
 library(ggplotify)
 library(latex2exp)
 library(KEGG.db)
+library(magick)
 
 cleanbib()   
 cite_options(citation_format = "pandoc")
@@ -83,6 +87,7 @@ opts_chunk$set(cache = 2, cache.path = "output/cache/")
 
 ## Plots
 opts_chunk$set(fig.path = "output/figures/")
+
 
 
 ```
@@ -165,10 +170,12 @@ colnames(cov) = protImpute$Uniprot
 rownames(cov) = protImpute$Uniprot
 ```
 
-```{r group_prots, include=FALSE}
+```{r group_prots, include=FALSE, eval=FALSE}
 # GO Terms
-GO <- protImpute %>% dplyr::select(Uniprot) %>% filter(Uniprot %in% keys) %>% 
-  mutate(GOterms = mapIds(org.Xl.eg.db, 
+keys <- keys(org.Xl.eg.db, keytype = 'UNIPROT')
+
+GO <- protImpute %>% dplyr::select(Uniprot) %>% dplyr::filter(Uniprot %in% keys) %>% 
+  dplyr::mutate(GOterms = mapIds(org.Xl.eg.db, 
                      keys = Uniprot, 
                      keytype = 'UNIPROT', 
                      column = 'GOALL', 
@@ -204,8 +211,8 @@ kegg <- protImpute %>% dplyr::select(Uniprot) %>% filter(Uniprot %in% keys) %>%
                      multiVals = 'list'))
 
 allKEGG <- unnest(kegg, cols = KEGG) %>% nest(Uniprot = Uniprot) %>%
-  rowwise() %>% mutate(n = length(unlist(Uniprot))) %>% ungroup() %>%
-  mutate(name = kegg_names$kegg_name[match(KEGG,kegg_names$kegg_id)],
+  rowwise() %>% dplyr::mutate(n = length(unlist(Uniprot))) %>% ungroup() %>%
+  dplyr::mutate(name = kegg_names$kegg_name[match(KEGG,kegg_names$kegg_id)],
          type = "KEGG",
          ontology = NA) %>% rename(accession = KEGG) %>%
   dplyr::select(type, accession, name, ontology, Uniprot, n)
@@ -247,7 +254,7 @@ filter(n > 3,
 
 ```
 
-```{r total_var, include=FALSE}
+```{r total_var, include=FALSE, eval=FALSE}
 groupCor <- function(x){
   geneList <- unlist(x)
   
@@ -286,6 +293,15 @@ allGroups <- allGroups %>% filter(!is.na(accession)) %>% rowwise() %>%
   mutate(totVar = totVarGroup(Uniprot),
          normVar = totVar / n) %>%
   filter(n > 3) %>% ungroup()
+
+allGroups <- allGroups %>% mutate(interval = cut_number(normVar, n = 7)) %>%
+  mutate(interval = ifelse(interval == levels(interval)[1],
+                           "low",
+                           ifelse(interval == levels(interval)[7],
+                                  "high",
+                                  "mid")))
+
+saveRDS(allGroups,"allGroups.RDS")
 ```
 
 
@@ -321,6 +337,7 @@ To determine the variance across these proteins, we calculated the variance and 
 Since we were able to measure all of these proteins within single cells, we are able to calculate coordinated expression of protein pairs at single cell resolution. Using Pearson correlation coefficient, we could determine coordinated expression of nearly 2 million protein pairs (Fig 1C) The distribution of correlation coefficients fit a normal distribution, with the majority of protein pairs appearing to not show significant coregulation. However, there appear to be a significant number of protein pairs containing high correlation coefficients, and the heatmap showed a lot of clustering of these highly coregulated pairs (Fig 1D).
 
 ```{r figure_1, echo=FALSE, fig.height=4, fig.width=6, message=FALSE, warning=FALSE, fig.cap=fig_legend_1}
+allGroups <- readRDS("allGroups.RDS")
 
 set.seed(41)
 
@@ -415,18 +432,7 @@ fig_legend_1 <- c("A) Simulated expression of two proteins over time in a single
 
 To investigate whether coordinated expression goes beyond just protein pairs, we wanted to see if pathways, complexes, and other modules had proteins that with coordinated expression. To answer this question, we grouped proteins by GO terms and calculated the median correlation coefficient across all pairs of proteins within the term. When the ranked media correlation is plotted it’s clear that there are a significant number of GO terms with higher than expected levels of coordinate expression.
 
-```{r figure_2,, echo=FALSE, fig.height=8, fig.width=6, message=FALSE, warning=FALSE, fig.cap=fig_legend_2}
-library(magick)
-
-
-
-allGroups <- allGroups %>% mutate(interval = cut_number(normVar, n = 7)) %>%
-  mutate(interval = ifelse(interval == levels(interval)[1],
-                           "low",
-                           ifelse(interval == levels(interval)[7],
-                                  "high",
-                                  "mid")))
-
+```{r figure_2, echo=FALSE, fig.height=7, fig.width=6, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_2}
 p1 <- ggplot(allGroups, aes(x = normVar, fill = interval)) + 
   geom_histogram(bins = 50) + theme_minimal() +
   #scale_fill_viridis_d()
@@ -436,100 +442,95 @@ p1 <- ggplot(allGroups, aes(x = normVar, fill = interval)) +
 interesting_groups_low <- c("03010","00030","GO:0046496","00071",
                             "GO:0006096","GO:0015934","GO:0019843",
                             "00051","GO:0042555","04012")
-interesting_groups_high <- c("GO:0042995","03008","GO:0007264","GO:0005885","GO:0007166","04150","GO:0035556","GO:0016791","GO:0007165")
+
+interesting_groups_high <- c("GO:0042995","03008","GO:0007264","GO:0005885",
+                             "GO:0007166","04150","GO:0035556","GO:0016791","GO:0007165")
+
 interesting_groups <- c(interesting_groups_low, interesting_groups_high)
 
-p2 <- ggplot(filter(allGroups, n > 5), aes(x = medCors, y = medCV, color = interval)) + 
+p2 <- ggplot(filter(allGroups, n > 5), aes(x = medCors, y = medCV, color = interval)) +
   geom_point(data = filter(allGroups, interval == "mid", n > 4),
              size = 2, alpha = 0.5, stroke = 0) +
   geom_point(data = filter(allGroups, interval != "mid", n > 4),
              size = 3, alpha = 0.75, stroke = 0) +
-  geom_label_repel(data = filter(allGroups, accession %in% interesting_groups), 
-                  aes(label = name), 
-                  colour = 'black', 
-                  size = 2,
+  geom_label_repel(data = filter(allGroups, accession %in% interesting_groups),
+                  aes(label = name),
+                  colour = 'black',
+                  size = 1.5,
                   force = 5,
-                  box.padding   = 1) +
+                  box.padding = 1) +
+  #coord_cartesian(ylim=c(-10,10)) +
   theme_minimal() +
   theme(legend.position = "none") +
   scale_color_manual(values = c("#d53e4f","#3288bd","grey")) +
   xlab("Mean Correlation") + ylab("Mean Coefficient of Variation")
 
 
-p3 <- ggplot(allGroups, aes(x = medCors, fill = interval)) + 
-  annotate("rect", xmin = 0.15, xmax = Inf, ymin = 0, ymax = Inf, fill = "orange", alpha = 0.5) + 
+p3 <- ggplot(allGroups, aes(x = medCors, fill = interval)) +
+  annotate("rect", xmin = 0.15, xmax = Inf, ymin = 0, ymax = Inf, fill = "orange", alpha = 0.5) +
   geom_density(data = filter(allGroups, interval != "mid"), alpha = 0.75, color = NA) +
   geom_density(data = filter(allGroups, interval == "mid"), alpha = 0.5, color = NA) +
   theme_minimal() +
   scale_fill_manual(values = c("#d53e4f","#3288bd","grey"))
 
-p4 <- ggplot(allGroups, aes(x = medCV, fill = interval)) + 
+p4 <- ggplot(allGroups, aes(x = medCV, fill = interval)) +
   geom_density(alpha = 0.75, color = NA) +
   theme_minimal() +
   scale_fill_manual(values = c("#d53e4f","#3288bd","grey"))
 
-p5 <- rbind(mutate(allGroups, interval = "mid", name = "all"),
-      filter(allGroups, accession %in% interesting_groups)) %>%
-  select(-Uniprot,-covs,-cv,-type,-ontology) %>%
-  unnest(cols = "cors") %>%
-  ggplot(., aes(x = fct_reorder(name,rank(interval)), y = cors, fill = interval)) + 
-  geom_boxplot(notch = TRUE, alpha = 0.75) +
-  scale_fill_manual(values = c("#d53e4f","#3288bd","grey")) +
-  coord_flip() + 
-  scale_x_discrete(labels = function(x) str_wrap(x, width = 15)) +
-  theme_minimal() +
-  theme(legend.position = "none",
-        text = element_text(size = 8),
-        axis.title.y=element_blank())
+# p5 <- rbind(mutate(allGroups, interval = "mid", name = "all"),
+#       filter(allGroups, accession %in% interesting_groups)) %>%
+#   dplyr::select(-Uniprot,-covs,-cv,-type,-ontology) %>%
+#   unnest(cols = "cors") %>%
+#   ggplot(., aes(x = fct_reorder(name,rank(interval)), y = cors, fill = interval)) +
+#   #geom_boxplot(notch = FALSE, alpha = 0.75, outlier.size = 0) +
+#   geom_violin() +
+#   scale_fill_manual(values = c("#d53e4f","#3288bd","grey")) +
+#   coord_flip() +
+#   scale_x_discrete(labels = function(x) str_wrap(x, width = 15)) +
+#   theme_minimal() +
+#   theme(text = element_text(size = 6),
+#         axis.title.y=element_blank())
 
-p6 <- p2 + p5 + plot_layout(widths = c(1,0.5))
+p6 <- p2 + plot_spacer() + plot_layout(widths = c(1,0.5))
   
-(p1 + p3 + p4) / p6 + plot_layout(heights = c(1,4)) +
-  plot_annotation(tag_levels = "A") & 
+(p1 + p3 + p4) / p6 + plot_layout(heights = c(1,5)) +
+  plot_annotation(tag_levels = "A") &
   theme(legend.position = "none")
+
+#p1 + p2 + p3 + plot_annotation(tag_levels = "A")
 
 fig_legend_2 <- c("A) Histogram of the normalized variation values across all of the GO terms and KEGG pathways. The bottom and top 10% are colored blue and red respectively. B) Pairwise plot between the mean correlation and mean coefficient of variaiton within each GO term and KEGG pathway with color coding from A. Interestingly, both the top and bottom 10% of normalized variation have groups of proteins with high levels of correlation, despite high correlation adding to total variance. In the lowest 10% of normalized variation groups there appears to be a negative correlation between mean correlation and variation.")
-```
 
-```{r sup_fig_1, echo=FALSE, fig.height=2, fig.width=6, message=FALSE, warning=FALSE, fig.cap=sup_fig_legend_1}
-allGroups %>% filter(n > 4) %>%
-  ggplot(., aes(x = medCors, y = medCV, color = interval)) + 
-  geom_point() + 
-  scale_color_manual(values = c("#d53e4f","#3288bd","grey")) +
-  stat_summary(fun.data=mean_cl_normal) + 
-  geom_smooth(method='lm', formula= y~x, color = "black") +
-  facet_wrap(~interval, scales = "free", nrow = 1) +
-  theme_minimal() +
-  theme(legend.position = "none")
-
-sup_fig_legend_1 <- c("Pairwise plots of the mean correlation coefficient and mean coefficient of variation of protien groups with linear fit. The low variance protein groups have a significant negative correlation between these two variables, showing that for protien modules that require low variance and high coexpression, showing that these two parameters... R (high, low, med) = (0.057, -0.485, 0.071)")
 ```
 
 
-```{r figure_3, echo=FALSE, fig.height=8, fig.width=6, message=FALSE, warning=FALSE, fig.cap=fig_legend_3}
+
+
+```{r figure_3, echo=FALSE, fig.height=6, fig.width=6, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_3}
 library(circlize)
 
-allGroups[grep("large ribo",allGroups$name),]
+#allGroups[grep("large ribo",allGroups$name),]
 prots <- allGroups %>% filter(accession == "GO:0015934") %>% pull(Uniprot) %>% unlist() %>% as.vector()
 mat <- cor[prots,prots]
 rownames(mat) <- mapIds(org.Xl.eg.db, keys = rownames(mat), keytype = 'UNIPROT', column = 'SYMBOL')
 
-col_fun = colorRamp2(seq(-1,1,0.01), rev(colorRampPalette(brewer.pal(11, 'RdBu'))(201)))
 
 p1 <- as.ggplot(
   Heatmap(
     mat,
     column_title = "Large ribosomal subunit",
-    column_title_gp = gpar(fontsize = 20, fontface = "bold"),
-    col = col_fun,
+    column_title_gp = gpar(fontsize = 5, fontface = "bold"),
+    col = colorRamp2(seq(-1,1,0.01), rev(colorRampPalette(brewer.pal(11, 'RdBu'))(201))),
     heatmap_legend_param = list(title = "R"),
-    show_column_dend = TRUE,
-    show_row_dend = TRUE,
+    row_names_gp = gpar(fontsize = 4),
+    column_names_gp = gpar(fontsize = 4),
+    show_column_dend = FALSE,
+    show_row_dend = FALSE,
     show_column_names = TRUE,
     show_row_names = TRUE,
-    use_raster = FALSE,
-    cell_fun = function(j, i, x, y, width, height, fill) {
-        grid.text(sprintf("%.1f", mat[i, j]), x, y, gp = gpar(fontsize = 10))}
+    #cell_fun = function(j, i, x, y, width, height, fill) {grid.text(sprintf("%.1f", mat[i, j]), x, y, gp = gpar(fontsize = 1))},
+    use_raster = FALSE
   )
 )
 
@@ -583,16 +584,22 @@ col_fun <- colorRamp2(seq(range(totVarMat)[1],
                                               n = 151, 
                                               type = "continuous"))
 
-Heatmap(totVarMat,
+p3 <- as.ggplot(Heatmap(totVarMat,
         col = col_fun,
         cluster_rows = FALSE,
         cluster_columns = FALSE,
+        show_column_names = FALSE,
+        show_row_names = FALSE,
         border = NA,
         column_title = "R",
         row_title = "CV",
         heatmap_legend_param = list(title = "Norm Var"),
         row_names_gp = gpar(fontsize = 5),
-        column_names_gp = gpar(fontsize = 5))
+        column_names_gp = gpar(fontsize = 5)))
+
+bottom <- p2 + p3 + plot_layout(widths = c(1,2))
+(p1 + plot_spacer()) / bottom + 
+  plot_annotation(tag_levels = "A")
 
 
 fig_legend_3 <- c("A) Histogram of the normalized variation values across all of the GO terms and KEGG pathways. The bottom and top 10% are colored blue and red respectively. B) Pairwise plot between the mean correlation and mean coefficient of variaiton within each GO term and KEGG pathway with color coding from A. Interestingly, both the top and bottom 10% of normalized variation have groups of proteins with high levels of correlation, despite high correlation adding to total variance. In the lowest 10% of normalized variation groups there appears to be a negative correlation between mean correlation and variation.")
@@ -616,50 +623,7 @@ $$\sigma_{{}_{total}} = \sqrt{var\left(\sum_{i=1}^n X_{i}\right)}$$
 
 $$\sigma_{{}_{norm}} = \dfrac{\sigma_{{}_{total}}}{n}$$
 
-$$
-\begin{bmatrix} 
-\ \sigma(X_{1})^2 +  \rho(X_1,X_2) \cdot \sigma(X_{1}) \cdot \sigma(X_{2}) \\
-\sigma(X_{1})^2 + \rho(X_1,X_3) \cdot \sigma(X_{1}) \cdot \sigma(X_{3}) \\
-\sigma(X_{1})^2 + \rho(X_1,X_4) \cdot \sigma(X_{1}) \cdot \sigma(X_{4}) \\
-\vdots \\
-\sigma(X_{i})^2 + \rho(X_i,X_j) \cdot \sigma(X_{i}) \cdot \sigma(X_{j}) \\
-\end{bmatrix}
- $$
 
-
-$$
-\begin{bmatrix}
-\sigma(X_{1}) \\
-\sigma(X_{1}) \\
-\sigma(X_{1}) \\
-\vdots \\
-\sigma(X_{i}) \\
-\end{bmatrix}^2
-+
-\begin{bmatrix} 
-\rho(X_1,X_2) \\
-\rho(X_1,X_3) \\
-\rho(X_1,X_4) \\
-\vdots \\
-\rho(X_i,X_j)
-\end{bmatrix}
-
-\begin{bmatrix}
-\sigma(X_{1}) \\
-\sigma(X_{1}) \\
-\sigma(X_{1}) \\
-\vdots \\
-\sigma(X_{i}) \\
-\end{bmatrix}
-
-\begin{bmatrix}
-\sigma(X_{2}) \\
-\sigma(X_{3}) \\
-\sigma(X_{4}) \\
-\vdots \\
-\sigma(X_{j}) \\
-\end{bmatrix}
- $$
 
 When calculating the total variance of a pathway or general group of proteins, the total variance is the square root of the sums of the squares of the coefficient of variance. However, if any of the proteins are correlated in expression, an extra term must be added to account for this correlation. This means that if a group of proteins have a positive correlation, then the total variance will be higher than if there was no correlation. In order to study how variance and coordinated expression are related between single cells, we wanted to calculate a normalized total variance metric. Since we were not interested in the increase of variance due to the number of proteins in a module, we calculated the total variance using the coefficient of variation and correlation coefficients and normalize to the total number of proteins in the module. When total variance is plotted against the number of proteins, there is a clear linear relationship between the two. Once we normalize to the total number of proteins this relationship is lost and we are left with the effects of coefficient of variation and correlation.
 
@@ -705,6 +669,23 @@ write.bibtex(file="knitcitations.bib")
 
 <div id = "refs"></div>
 
+\newpage
+# Supplementary material {-}
+
+\beginsupplement
+```{r sup_fig_1, echo=FALSE, fig.height=2, fig.width=6, message=FALSE, warning=FALSE, fig.cap=sup_fig_legend_1}
+allGroups %>% filter(n > 4) %>%
+  ggplot(., aes(x = medCors, y = medCV, color = interval)) + 
+  geom_point() + 
+  scale_color_manual(values = c("#d53e4f","#3288bd","grey")) +
+  stat_summary(fun.data=mean_cl_normal) + 
+  geom_smooth(method='lm', formula= y~x, color = "black") +
+  facet_wrap(~interval, scales = "free", nrow = 1) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+sup_fig_legend_1 <- c("Pairwise plots of the mean correlation coefficient and mean coefficient of variation of protien groups with linear fit. The low variance protein groups have a significant negative correlation between these two variables, showing that for protien modules that require low variance and high coexpression, showing that these two parameters... R (high, low, med) = (0.057, -0.485, 0.071)")
+```
 
 \eleft
 
