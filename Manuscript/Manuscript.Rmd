@@ -17,7 +17,6 @@ affiliation:
   affil: Department of Chemical and Systems Biology, Stanford University, Stanford, CA 94305, USA.
   
 output:
-
   pdf_document:
     fig_caption: yes
     fig_width: 7
@@ -27,10 +26,12 @@ output:
     template: manuscript.latex
     includes:
       in_header: header.tex
-
-  html_document: null
   
   word_document: null
+  html_document: null
+  
+  
+    
 documentclass: article
 capsize: normalsize
 geometry: margin=1in
@@ -434,17 +435,14 @@ fig_legend_1 <- c("A) Simulated expression of two proteins over time in a single
 
 \newpage
 
-## Total variance metric reveals certain modules enforce a trade-off between protein co-expression and noise
+## Variance sum law reveals modules that utilize a trade-off between protein co-expression and noise
 
-The sum of variance for a group of proteins $X_{1},\dotsc,X_{n}$ with dependent relationships:
-
+Multicomponent modules such as heteromeric protein complexes and metabolic and signaling pathways have a certain tolerance for noise. Two components of the noise of these systems are the expression variance of the individual proteins, as well as the correlation or covariance of expression between the proteins. This means that if a group of proteins have a positive correlation, then the total variance will be higher than if there was no correlation. This single cell proteomics dataset gave us an excellent opportunity to see how variance and co-expression of proteins are related in low variance and high variance modules. The total variance of a module can be calculated using the variance sum law, where for a group of proteins $X_{1},\dotsc,X_{n}$, the total variance of the module is:
 $$\sigma_{{}_{total}}^2 = \sum_{i=1}^{n} \sigma_{X_{i}}^2 + 2\sum_{i,j:i<j}^{n} \rho(X_{i},X_{j})\sigma_{X_i}\sigma_{X_j}$$
 
-$$\sigma_{{}_{norm}} = \dfrac{\sqrt{\sigma_{{}_{total}}}}{n}$$
+To categorize the measured protein expression data into modules, we utilized GO term and KEGG pathway annotations. Since pathways and complexes have varying numbers of proteins, and the number of proteins in a module is highly influential on the total variance sum, we normalized the total variance sum by the number of components (Fig. xA and xB). With this normalized total variance metric, we could separate modules into high and low variance categories (Fig 2A). Since co-expression of proteins (positive correlation between protein expression) increases the total variance, we expected to see the high variance modules to be enriched for high levels of both protein expression variance and co-expression (Fig 1B and 1C, red). However, we were suprised to see that the low variance modules were also enriched for high levels of co-expression of proteins, with some of the mean correlation coefficients of modules as high as those in the high variance category (Fig 1B, orange shaded region).
 
-
-
-When calculating the total variance of a pathway or general group of proteins, the total variance is the square root of the sums of the squares of the coefficient of variance. However, if any of the proteins are correlated in expression, an extra term must be added to account for this correlation. This means that if a group of proteins have a positive correlation, then the total variance will be higher than if there was no correlation. In order to study how variance and coordinated expression are related between single cells, we wanted to calculate a normalized total variance metric. Since we were not interested in the increase of variance due to the number of proteins in a module, we calculated the total variance using the coefficient of variation and correlation coefficients and normalize to the total number of proteins in the module. When total variance is plotted against the number of proteins, there is a clear linear relationship between the two. Once we normalize to the total number of proteins this relationship is lost and we are left with the effects of coefficient of variation and correlation.
+We wondered how these protein modules dealted with the increased variance load caused by the high numbers of correlated proteins, so we looked at the pairwise relationship between the mean variance of the modules and the mean correlations (Fig S1). The low variance modules uniquely showed a significant negative correlation (R = 0.49) between these two metrics, meaning that for modules that enforce a low level of total variance, co-expression of proteins within that module must also have low expression variance.
 
 \newpage
 
@@ -532,9 +530,8 @@ fig_legend_2 <- c("A) Histogram of the normalized variation values across all of
 
 ## Protein modules display different levels of regulation of noise and co-expression of constituents
 
-In order to see if variation was a regulated process, we grouped the protein variation by gene ontology terms (GO terms) and plotted them in ranked order. We saw that in general, processes xxx were…
-
-To investigate whether coordinated expression goes beyond just protein pairs, we wanted to see if pathways, complexes, and other modules had proteins that with coordinated expression. To answer this question, we grouped proteins by GO terms and calculated the median correlation coefficient across all pairs of proteins within the term. When the ranked media correlation is plotted it’s clear that there are a significant number of GO terms with higher than expected levels of coordinate expression.
+We saw that in general, processes xxx were… (Fig. 2D).
+(Fig. 3A-D) (Fig. 3E-H)
 
 \newpage
 
