@@ -339,7 +339,33 @@ To determine the variance across these proteins, we calculated the variance and 
 
 Since we were able to measure all of these proteins within single cells, we are able to calculate coordinated expression of protein pairs at single cell resolution. Using Pearson correlation coefficient, we could determine coordinated expression of nearly 2 million protein pairs (Fig 1F-G) The distribution of correlation coefficients fit a normal distribution, with the majority of protein pairs appearing to not show significant co-regulation. However, there appear to be a significant number of protein pairs containing high correlation coefficients, and the heat-map showed a lot of clustering of these highly co-regulated pairs (Fig 1G).
 
+
+## Variance sum law reveals modules that utilize a trade-off between protein co-expression and noise
+
+Multicomponent modules such as heteromeric protein complexes and metabolic and signaling pathways have a certain tolerance for noise. Two components of the noise of these systems are the expression variance of the individual proteins, as well as the correlation or covariance of expression between the proteins. This means that if a group of proteins have a positive correlation, then the total variance will be higher than if there was no correlation. This single cell proteomics dataset gave us an excellent opportunity to see how variance and co-expression of proteins are related in low variance and high variance modules. The total variance of a module can be calculated using the variance sum law, where for a group of proteins $X_{1},\dotsc,X_{n}$, the total variance of the module is:
+$$\sigma_{{}_{total}}^2 = \sum_{i=1}^{n} \sigma_{X_{i}}^2 + 2\sum_{i,j:i<j}^{n} \rho(X_{i},X_{j})\sigma_{X_i}\sigma_{X_j}$$
+
+To categorize the measured protein expression data into modules, we utilized GO term and KEGG pathway annotations. Since pathways and complexes have varying numbers of proteins, and the number of proteins in a module is highly influential on the total variance sum, we normalized the total variance sum by the number of components (Fig. xA and xB). With this normalized total variance metric, we could separate modules into high and low variance categories (Fig 2A). Since co-expression of proteins (positive correlation between protein expression) increases the total variance, we expected to see the high variance modules to be enriched for high levels of both protein expression variance and co-expression (Fig 1B and 1C, red). However, we were suprised to see that the low variance modules were also enriched for high levels of co-expression of proteins, with some of the mean correlation coefficients of modules as high as those in the high variance category (Fig 1B, orange shaded region).
+
+We wondered how these protein modules dealted with the increased variance load caused by the high numbers of correlated proteins, so we looked at the pairwise relationship between the mean variance of the modules and the mean correlations (Fig S1). The low variance modules uniquely showed a significant negative correlation (R = 0.49) between these two metrics, meaning that for modules that enforce a low level of total variance, co-expression of proteins within that module must also have low expression variance.
+
+
+
+## Protein modules display different levels of regulation of noise and co-expression of constituents
+
+We saw that in general, processes xxx were… (Fig. 2D).
+(Fig. 3A-D) (Fig. 3E-H)
+
+
+
+## Low total variance modules are enriched for metabolic pathways and heteromeric protein complexes
+
+
+## Enforcement of a trade-off between protein co-expression and noise increases efficiency of metabolic pathways and heteromeric protein complexes
+
 \newpage
+
+# Figures
 
 ```{r figure_1, echo=FALSE, fig.height=4.5, fig.width=6, message=FALSE, warning=FALSE, fig.cap=fig_legend_1}
 allGroups <- readRDS("allGroups.RDS")
@@ -435,17 +461,6 @@ fig_legend_1 <- c("A) Simulated expression of two proteins over time in a single
 
 \newpage
 
-## Variance sum law reveals modules that utilize a trade-off between protein co-expression and noise
-
-Multicomponent modules such as heteromeric protein complexes and metabolic and signaling pathways have a certain tolerance for noise. Two components of the noise of these systems are the expression variance of the individual proteins, as well as the correlation or covariance of expression between the proteins. This means that if a group of proteins have a positive correlation, then the total variance will be higher than if there was no correlation. This single cell proteomics dataset gave us an excellent opportunity to see how variance and co-expression of proteins are related in low variance and high variance modules. The total variance of a module can be calculated using the variance sum law, where for a group of proteins $X_{1},\dotsc,X_{n}$, the total variance of the module is:
-$$\sigma_{{}_{total}}^2 = \sum_{i=1}^{n} \sigma_{X_{i}}^2 + 2\sum_{i,j:i<j}^{n} \rho(X_{i},X_{j})\sigma_{X_i}\sigma_{X_j}$$
-
-To categorize the measured protein expression data into modules, we utilized GO term and KEGG pathway annotations. Since pathways and complexes have varying numbers of proteins, and the number of proteins in a module is highly influential on the total variance sum, we normalized the total variance sum by the number of components (Fig. xA and xB). With this normalized total variance metric, we could separate modules into high and low variance categories (Fig 2A). Since co-expression of proteins (positive correlation between protein expression) increases the total variance, we expected to see the high variance modules to be enriched for high levels of both protein expression variance and co-expression (Fig 1B and 1C, red). However, we were suprised to see that the low variance modules were also enriched for high levels of co-expression of proteins, with some of the mean correlation coefficients of modules as high as those in the high variance category (Fig 1B, orange shaded region).
-
-We wondered how these protein modules dealted with the increased variance load caused by the high numbers of correlated proteins, so we looked at the pairwise relationship between the mean variance of the modules and the mean correlations (Fig S1). The low variance modules uniquely showed a significant negative correlation (R = 0.49) between these two metrics, meaning that for modules that enforce a low level of total variance, co-expression of proteins within that module must also have low expression variance.
-
-\newpage
-
 ```{r figure_2, echo=FALSE, fig.height=7, fig.width=6, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_2}
 p1 <- ggplot(allGroups, aes(x = normVar, fill = interval)) + 
   geom_histogram(data = filter(allGroups, interval == "mid"),bins = 50) + 
@@ -528,13 +543,6 @@ fig_legend_2 <- c("A) Histogram of the normalized variation values across all of
 
 \newpage
 
-## Protein modules display different levels of regulation of noise and co-expression of constituents
-
-We saw that in general, processes xxx were… (Fig. 2D).
-(Fig. 3A-D) (Fig. 3E-H)
-
-\newpage
-
 ```{r figure_3, echo=FALSE, fig.height=4, fig.width=7, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_3}
 plots <- 1:4
 for(i in 1:length(plots)){
@@ -556,13 +564,6 @@ wrap_plots(left, right) +
 
 fig_legend_3 <- c("Density plots of correlation coefficients select protein groups color coded by low (blue) and high (red) normalized protein variance, with the distribution of all measured correlation coefficients colored in grey (rug plot to show the measured correlations coefficents shown on plot). Below each density plot is a box plot.")
 ```
-
-\newpage
-
-## Low total variance modules are enriched for metabolic pathways and heteromeric protein complexes
-
-
-## Enforcement of a trade-off between protein co-expression and noise increases efficiency of metabolic pathways and heteromeric protein complexes
 
 \newpage
 
@@ -668,6 +669,25 @@ fig_legend_4 <- c("A) A representative heat-map of one of the low normalized var
 
 \newpage
 
+# Supplementary material {-}
+
+\beginsupplement
+```{r sup_fig_1, echo=FALSE, fig.height=2, fig.width=6, message=FALSE, warning=FALSE, fig.cap=sup_fig_legend_1}
+allGroups %>% filter(n > 4) %>%
+  ggplot(., aes(x = medCors, y = medCV, color = interval)) + 
+  geom_point() + 
+  scale_color_manual(values = c("#d53e4f","#3288bd","grey")) +
+  stat_summary(fun.data=mean_cl_normal) + 
+  geom_smooth(method='lm', formula= y~x, color = "black") +
+  facet_wrap(~interval, scales = "free", nrow = 1) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+sup_fig_legend_1 <- c("Pairwise plots of the mean correlation coefficient and mean coefficient of variation of protien groups with linear fit. The low variance protein groups have a significant negative correlation between these two variables, showing that for protein modules that require low variance and high co-expression, showing that these two parameters... R (high, low, med) = (0.057, -0.485, 0.071)")
+```
+
+\newpage
+
 # Methods
 
 ## Collection and activation of Xenopus laevis eggs:
@@ -705,24 +725,6 @@ write.bibtex(file="knitcitations.bib")
 ```
 
 <div id = "refs"></div>
-
-\newpage
-# Supplementary material {-}
-
-\beginsupplement
-```{r sup_fig_1, echo=FALSE, fig.height=2, fig.width=6, message=FALSE, warning=FALSE, fig.cap=sup_fig_legend_1}
-allGroups %>% filter(n > 4) %>%
-  ggplot(., aes(x = medCors, y = medCV, color = interval)) + 
-  geom_point() + 
-  scale_color_manual(values = c("#d53e4f","#3288bd","grey")) +
-  stat_summary(fun.data=mean_cl_normal) + 
-  geom_smooth(method='lm', formula= y~x, color = "black") +
-  facet_wrap(~interval, scales = "free", nrow = 1) +
-  theme_minimal() +
-  theme(legend.position = "none")
-
-sup_fig_legend_1 <- c("Pairwise plots of the mean correlation coefficient and mean coefficient of variation of protien groups with linear fit. The low variance protein groups have a significant negative correlation between these two variables, showing that for protein modules that require low variance and high co-expression, showing that these two parameters... R (high, low, med) = (0.057, -0.485, 0.071)")
-```
 
 \eleft
 
