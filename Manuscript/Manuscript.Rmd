@@ -144,14 +144,14 @@ protImpute <- pepTidy %>%
   summarise(abundance = mean(intensity, na.rm = T)) %>% ungroup() %>%
   group_by(Uniprot) %>%
   mutate(abundance = abundance / mean(abundance, na.rm = T)) %>% 
-  filter(n() > 15) %>% # comment out if using KNN
+  # filter(n() > 15) %>% # comment out if using KNN
   group_by(cell) %>% 
   mutate(abundance = abundance / mean(abundance, na.rm = T)) %>% 
   ungroup() %>% 
   dplyr::select(cell, Uniprot, abundance) %>% 
   spread(cell, abundance)
-  # spread(cell, abundance) %>%
-  # kNN(data = ., k = 1, impNA = TRUE) %>% as_tibble() %>% dplyr::select(Uniprot:e_131_80)
+  spread(cell, abundance) %>%
+  kNN(data = ., k = 1, impNA = TRUE) %>% as_tibble() %>% dplyr::select(Uniprot:e_131_80)
 
 ```
 
