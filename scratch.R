@@ -54,3 +54,20 @@ int <- matrix(data = c(0,1,0,
                        1,0,0),
               nrow = 3)
 mat <- cor[1:3,1:3]
+
+
+
+
+
+piris <- ggplot(iris, aes(Sepal.Length, Sepal.Width, colour = Species)) +
+  geom_point() + 
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+ggMarginal(piris, groupColour = F, groupFill = TRUE, color = "transparent")
+
+ggMarginal(p2, groupColour = F, groupFill = TRUE, color = "transparent")
+
+p3 + plot_spacer() + p2 + (p4 + coord_flip()) +
+  plot_layout(widths = c(4,1),
+              heights = c(1,4))

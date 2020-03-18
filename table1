@@ -1,0 +1,2 @@
+type,accession,name,ontology,Uniprot,n,cors,covs,cv,sd,medCors,medCV,medSD,totVar,normVar,interval
+GO,GO:0005885,Arp2/3 protein complex,CC,

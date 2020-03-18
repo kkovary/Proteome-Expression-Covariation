@@ -28,3 +28,9 @@ plotly
 cowplot
 patchwork
 mvtnorm
+ComplexHeatmap
+ggplotify
+latex2exp
+KEGG.db
+magick
+circlize

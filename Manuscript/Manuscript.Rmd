@@ -497,7 +497,7 @@ p2 <- ggplot(filter(allGroups, n > 5), aes(x = medCors, y = medCV, color = inter
 
 
 p3 <- ggplot(allGroups, aes(x = medCors, fill = interval)) +
-  annotate("rect", xmin = 0.15, xmax = Inf, ymin = 0, ymax = Inf, fill = "orange", alpha = 0.5) +
+  #annotate("rect", xmin = 0.15, xmax = Inf, ymin = 0, ymax = Inf, fill = "orange", alpha = 0.5) +
   geom_density(data = filter(allGroups, interval != "mid"), alpha = 0.75, color = NA) +
   geom_density(data = filter(allGroups, interval == "mid"), alpha = 0.5, color = NA) +
   theme_minimal() +
