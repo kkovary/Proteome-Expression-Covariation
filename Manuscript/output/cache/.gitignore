@@ -1,3 +1,5 @@
 *.RData
 *.rdb
 *.rdx
+.DS_Store
+__packages

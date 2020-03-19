@@ -149,7 +149,7 @@ protImpute <- pepTidy %>%
   mutate(abundance = abundance / mean(abundance, na.rm = T)) %>% 
   ungroup() %>% 
   dplyr::select(cell, Uniprot, abundance) %>% 
-  spread(cell, abundance)
+  # spread(cell, abundance)
   spread(cell, abundance) %>%
   kNN(data = ., k = 1, impNA = TRUE) %>% as_tibble() %>% dplyr::select(Uniprot:e_131_80)
 
@@ -309,6 +309,7 @@ allGroups <- allGroups %>% mutate(interval = cut_number(normVar, n = 7)) %>%
 ```
 
 
+
 *Keywords*: single cell, proteomics, stochasticity
 
 \doublespace
@@ -364,7 +365,7 @@ We also observed a number of metabolic pathways that had similar variation and c
 # Figures
 
 ```{r figure_1, echo=FALSE, fig.height=4.5, fig.width=6, message=FALSE, warning=FALSE, fig.cap=fig_legend_1}
-#allGroups <- readRDS("allGroups.RDS")
+allGroups <- readRDS("allGroups.RDS")
 
 set.seed(41)
 
@@ -476,7 +477,7 @@ interesting_groups_high <- c("GO:0042995","03008","GO:0007264","GO:0005885",
 
 interesting_groups <- c(interesting_groups_low, interesting_groups_high)
 
-p2 <- ggplot(filter(allGroups, n > 5), aes(x = medCors, y = medCV, color = interval)) +
+p2 <- ggplot(filter(allGroups, n > 5), aes(x = medCors, y = medCV, color = interval, shape = type)) +
   geom_point(data = filter(allGroups, interval == "mid", n > 4),
              size = 2, alpha = 0.5, stroke = 0) +
   geom_point(data = filter(allGroups, interval != "mid", n > 4),
