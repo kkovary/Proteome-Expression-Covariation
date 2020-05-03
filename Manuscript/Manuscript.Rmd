@@ -18,17 +18,17 @@ affiliation:
   
   
 output:
-  # word_document:
+  word_document:
   # html_document:  
-  pdf_document:
-    fig_caption: yes
-    fig_width: 7
-    fig_height: 7
-    keep_tex: yes
-    number_sections: no
-    template: manuscript.latex
-    includes:
-      in_header: header.tex
+  # pdf_document:
+  #   fig_caption: yes
+  #   fig_width: 7
+  #   fig_height: 7
+  #   keep_tex: yes
+  #   number_sections: no
+  #   template: manuscript.latex
+  #   includes:
+  #     in_header: header.tex
   
   
     
@@ -44,7 +44,7 @@ bibliography:
   - references.bib
   - knitcitations.bib
 csl: cell.csl
-abstract: Protein expression variation leads to phenotypic variance between cells. This has been demonstrated in cell signaling and differentiation decisions. Additionally coordinated expression of proteins between cells can tune signaling pathways either towards a more binary or analog modality. Though there is some evidence in bulk cell measurements and in bacteria that certain heteromeric subunits or metabolic pathways may be expressed in a coordinated fashion (i.e. operons in bacteria), there has not been a direct measurement of coordinated expression of proteins (independent of TFs) in metazoans (vertebrates?). Here, we measure cell-to-cell variability of relative protein abundance using quantitative proteomics of individual *Xenopus laevis* eggs and show that proteins involved in metabolic pathways or members of heteromeric complexes tend to have high correlations with other members of those pathways/complexes. Our previous work highlighted the fact that correlated expression increases the total variation of a pathway, so one would reason that certain pathways or complexes would need to compensate of this extra source of by reducing the variation of expression of these pathways or complexes. To test this we computed total variance score that took into account both the coefficient of variance and correlations between proteins in a pathway and found that the lower 10% of GO terms were highly enriched for metabolic pathways. When we looked at the relationship between CV and R between these GO terms we found a negative relationship between them, demonstrating that increased correlation needs to come at the expense of decreased variance. Simple molecular models of heteromeric complexes and metabolic pathways demonstrate that this tradeoff can result in higher efficiencies in both function and reduced energy waste. Together, our study argues for a control principle whereby coordinated expression of proteins in a pathway can require lower variance in order to reduce the overall pathway variance, enabling accurate control of active complexes or metabolic pathway activity.
+abstract: Protein expression variation leads to phenotypic variance between cells. This has been demonstrated in cell signaling and differentiation decisions. Additionally coordinated expression of proteins between cells can tune signaling pathways either towards a more binary or analog modality. Though there is some evidence in bulk cell measurements and in bacteria that certain heteromeric subunits or metabolic pathways may be expressed in a coordinated fashion (i.e. operons in bacteria), there has not been a direct measurement of coordinated expression of proteins (independent of TFs) in metazoans (vertebrates?). Here, we measure cell-to-cell variability of relative protein abundance using quantitative proteomics of individual *Xenopus laevis* eggs and show that proteins involved in metabolic pathways or members of heteromeric complexes tend to have high correlations with other members of those pathways/complexes. Our previous work highlighted the fact that correlated expression increases the total variation of a pathway, so one would reason that certain pathways or complexes would need to compensate this extra source of variation for these pathways or complexes. To test this we computed total variance score that took into account both the coefficients of variation and correlation coefficients between proteins in a pathway and found that the lower 10% of GO terms were highly enriched for metabolic pathways. When we looked at the relationship between CV and R between these GO terms we found a negative relationship between them, demonstrating that increased correlation needs to come at the expense of decreased variance. Simple molecular models of heteromeric complexes and metabolic pathways demonstrate that this tradeoff can result in higher efficiencies in both function and reduced energy waste. Together, our study argues for a control principle whereby coordinated expression of proteins in a pathway can require lower variance in order to reduce the overall pathway variance, enabling accurate control of active complexes or metabolic pathway activity.
 ---
 
 
@@ -55,6 +55,7 @@ library(tidyverse)
 library(RColorBrewer)
 #library(pheatmap)
 library(ComplexHeatmap)
+library(circlize)
 library(GGally)
 library(VIM)
 library(org.Xl.eg.db)
@@ -134,24 +135,50 @@ pepTidy <- pepRaw %>%
 ```
 
 ```{r normalization, include=FALSE}
-protImpute <- pepTidy %>% 
-  group_by(peptide,run) %>% 
+protImpute <- pepTidy %>%
+  group_by(peptide,run) %>%
   mutate(intensity = intensity / intensity[label == "126"]) %>%
   ungroup() %>%
   filter(run != "ctrl", condition != "ctrl") %>%
   dplyr::filter(abs((intensity)) < 2*sd((pepTidy$intensity), na.rm = T)) %>%
-  group_by(cell, run, label, condition, Uniprot) %>% 
+  group_by(cell, run, label, condition, Uniprot) %>%
   summarise(abundance = mean(intensity, na.rm = T)) %>% ungroup() %>%
   group_by(Uniprot) %>%
-  mutate(abundance = abundance / mean(abundance, na.rm = T)) %>% 
-  # filter(n() > 15) %>% # comment out if using KNN
-  group_by(cell) %>% 
-  mutate(abundance = abundance / mean(abundance, na.rm = T)) %>% 
-  ungroup() %>% 
-  dplyr::select(cell, Uniprot, abundance) %>% 
+  mutate(abundance = abundance / mean(abundance, na.rm = T)) %>%
+  #filter(n() >= 10) %>% # comment out if using KNN
+  filter(n() > 5) %>%
+  group_by(cell) %>%
+  mutate(abundance = abundance / mean(abundance, na.rm = T)) %>%
+  ungroup() %>%
+  dplyr::select(cell, Uniprot, abundance) %>%
   # spread(cell, abundance)
-  spread(cell, abundance) %>%
-  kNN(data = ., k = 1, impNA = TRUE) %>% as_tibble() %>% dplyr::select(Uniprot:e_131_80)
+  #spread(cell, abundance) %>%
+  spread(Uniprot, abundance) %>%
+  kNN(data = ., k = 3, impNA = TRUE) %>% as_tibble() %>%
+  #dplyr::select(Uniprot:e_131_80)
+  dplyr::select(cell:UBE2I_HUMAN) %>%
+  pivot_longer(2:ncol(.), names_to = "Uniprot", values_to = "abundance") %>%
+  spread(cell, abundance)
+
+# protImpute <- pepTidy %>%
+#   group_by(peptide,run) %>%
+#   mutate(intensity = intensity / intensity[label == "126"]) %>%
+#   ungroup() %>%
+#   filter(run != "ctrl", condition != "ctrl") %>%
+#   dplyr::filter(abs((intensity)) < 2*sd((pepTidy$intensity), na.rm = T)) %>%
+#   group_by(cell, run, label, condition, Uniprot) %>%
+#   summarise(abundance = mean(intensity, na.rm = T)) %>% ungroup() %>%
+#   group_by(Uniprot) %>%
+#   mutate(abundance = abundance / mean(abundance, na.rm = T)) %>%
+#   #filter(n() >= 10) %>% # comment out if using KNN
+#   group_by(cell) %>%
+#   mutate(abundance = abundance / mean(abundance, na.rm = T)) %>%
+#   ungroup() %>%
+#   dplyr::select(cell, Uniprot, abundance) %>%
+#   spread(cell, abundance) %>%
+#   kNN(data = ., k = 1, impNA = TRUE) %>%
+#   as_tibble() %>%
+#   dplyr::select(Uniprot:e_131_80)
 
 ```
 
@@ -247,7 +274,9 @@ allGroups <- allGroups %>% group_by(accession) %>%
                 cv = selectCV(Uniprot),
                 sd = selectSD(Uniprot)) %>% ungroup() %>%
   rowwise() %>% mutate(medCors = mean(cors, na.rm = TRUE),
+                       sdCors = sd(cors),
                        medCV = mean(cv, na.rm = TRUE),
+                       sdCV = sd(cv),
                        medSD = mean(sd, na.rm = TRUE)) %>%
   ungroup() %>%
 filter(n > 3,
@@ -318,38 +347,49 @@ allGroups <- allGroups %>% mutate(interval = cut_number(normVar, n = 7)) %>%
 
 \justify
 
+# 3 Takeaway Points
+
+* To understand the total variance of a protein module such as a metabolic pathway or protein complex, a single cell approach capable of measuring the varaince and correlation of proteins is necessary.
+* For core housekeeping modules such as metabolic pathways and heteromeric complexes like the ribosome, individual cells enforce a balance between protein expression variance and co-expression variance.
+* For certain modules increasing co-expression and reducing expression variance may allow for better control and more efficient opperation.
 
 # Introduction
 
-The coordinated expression of proteins is vital for cellular function, from maintaining a dynamic steady state to differentiation of cells into specialized types and tissues. This coordinated regulation of protein abundance is subject to stochastic expression levels, and modules (pathways, complexes, etc.) have varying tolerances of noise for proper function ranging from precise stoichiometric coordination, to high levels of noise that can result in heterogeneous responses of homogeneous cell populations to identical stimuli `r citep("10.1073/pnas.1615660114")`. The ability to regulate coordinated expression has been demonstrated to occur via transcription (transcription factors, chromatin regulation), translation (specialized ribosomes, mRNA structure/modifications), and degradation (E3 ligases), all of which are subject to stochastic expression and interactions. This noise has been shown be utilized by cells for bet hedging strategies as well as tissue size maintenance (more concrete examples to come). Additionally, the combination of variability and coordinated expression (correlation) of proteins can lead to increased population level control in binary decisions, and a decreased ability to execute analog signaling `r citep(c("doi.org/10.15252/msb.20177997", "10.1073/pnas.1615660114"))`.
+The coordinated expression of proteins is vital for cellular function, from maintaining a dynamic steady state to differentiation of cells into specialized types and tissues. This is especailly critical for heteromeric protein complexes and metabolic and signaling pathways where many proteins are required to work in coordination in order for the system to function. For prokaryotes (and in rare instances eukaryotes), this is accomplished in a rather uncomplicated fashion through the use of opperons that can be co-translated. Eukaryotes for the most part rely on transcriptional activators and repressors to coordinate the expression of these genes that may exist in clusters or scattered throughout the genome. The bursty nature of transcriptional dynamics, which is less of an issue in the case of opperons, leads to stochastic production of mRNA of each component of the pathway. There exist buffering mechanisms such as bottlenecking in post-processing of nacient mRNA and nuclear export. There also exists evidence of co-translation through specialized ribosomes in eukaryotes that can preferentially translate members of the same pathway.
 
-There have been numerous studies, both targeted and unbiased, of coordinated protein expression or expression variation independently that have shown the important impacts of these parameters on cellular function. However, both of these parameters (variation and correlation) act together to determine the total variance of a system. To systematically assess these properties of single cells at a large scale, we conducted shotgun proteomics analyses on *Xenopus laevis* eggs during their first cell cycle. We have found this model to be ideal at this nascent stage of the single cell proteomics field because of their large size and tractability. An advantage of this approach is that we can get around much of the signal to noise issues that accompany studying single cells caused by low sample protein levels. Additionally, at this stage of development transcription is restricted, allowing for insights into non-transcriptional control of protein expression. By utilizing isobaric tagging and shotgun mass spectrometry we were able to measure >1000 proteins across 25 single cells in 5 mass spectrometry runs. 
+This coordinated regulation of protein abundance is subject to stochastic expression levels, and modules (pathways, complexes, etc.) have varying tolerances of noise for proper function ranging from precise stoichiometric coordination, to high levels of noise that can result in heterogeneous responses of homogeneous cell populations to identical stimuli `r citep("10.1073/pnas.1615660114")`. The ability to regulate coordinated expression has been demonstrated to occur via transcription (transcription factors, chromatin regulation), translation (specialized ribosomes, mRNA structure/modifications), and degradation (E3 ligases), all of which are subject to stochastic expression and interactions. This noise has been shown to be utilized by cells for bet hedging strategies as well as tissue size maintenance (more concrete examples to come). Additionally, the combination of variability and coordinated expression (correlation) of proteins can lead to increased population level control in binary decisions, and a decreased ability to execute analog signaling `r citep(c("doi.org/10.15252/msb.20177997", "10.1073/pnas.1615660114"))`.
 
-With this data set we have been able to, for the first time, gain insights into the relationship between protein expression variance, coordinated protein expression, and total variance within modules at a proteomic scale in single cells. We identified classes of proteins that include heteromeric complexes and metabolic pathways that are expressed in such a way that the increase in total variance of the system caused by high coordinated expression of proteins is offset by decreased variation, allowing for modules that rely on stoichiometric expression and low level of variance to maintain a low level of total system variance. By counter balancing coordinated expression (correlation) of proteins in a module with low expression variance, cells are able to decrease the total variance of a given complex or pathway. This elegant balancing act may allow for finer control of metabolic throughput and controlling the number of potentially formed complexes though stoichiometric control.
+There have been numerous studies, both targeted and unbiased, of coordinated protein expression or expression variation independently that have shown the important impacts of these parameters on cellular function. However, both of these parameters (variation and correlation) act together to determine the total variance of a system. Additionally, the nature of these two sources of variance can have very different impacts on the behavior or function of different systems. For example, high amounts of variance can decrease the output of a metabolic pathway but can increase the population level control of a binary signalling pathway. On the other hand, high levels of correlated expression, while technically increasing the variance of a system, can increase the output of metabolic pathways. We wanted to study these two sources of variation to identify instances where there may be a trade off between them or if they're used in coordination with one another.
+
+To systematically assess these properties of single cells at a large scale, we conducted shotgun proteomics analyses on *Xenopus laevis* eggs during their first cell cycle. We have found this model to be ideal at this nascent stage of the single cell proteomics field because of their large size and tractability. An advantage of this approach is that we can get around much of the signal to noise issues that accompany studying single cells caused by low sample protein levels. Additionally, at this stage of development transcription is restricted, allowing for insights into non-transcriptional control of protein expression. By utilizing isobaric tagging and shotgun mass spectrometry we were able to measure >1000 proteins across 25 single cells in 5 mass spectrometry runs. 
+
+With this data set we have been able to, for the first time, gain insights into the relationship between protein expression variance, coordinated protein expression, and total variance within modules at a proteomic scale in single cells. We identified classes of proteins that include heteromeric complexes and metabolic pathways that are expressed in such a way that the increase in total variance of the system caused by high coordinated expression of proteins is offset by decreased variation, allowing for modules that rely on stoichiometric expression and low level of variance to maintain a low level of total system variance. By counter balancing coordinated expression (correlation) of proteins in a module with low expression variance, cells are able to decrease the total variance of a given complex or pathway. This elegant balancing act may allow for finer control of metabolic throughput and controlling the number of potentially formed complexes through stoichiometric control.
 
 # Results
 
 ## Single cell proteomics reveals global protein expression variability and coordinated expression between protein pairs.
 
-The specific requirements for coordinated protein expression of pathways or complexes can vary, with some requiring strict stoichiometric regulation and others having much more relaxed requirements. Strict stoichiometry scenarios require coordinated expression of proteins (Figure 1A, top), and others can have uncoordinated expression (Figure 1A bottom). At the single cell level, coordinated expression will result in a high correlation coefficient, whereas un-coordinated expression will result in a low correlation coefficient (Figure 1B). Even when the expression variation (standard deviation or coefficient of variation) and abundance is identical between these two scenarios, the total variance of a pathway or complex can be significantly different due to the variance sum law: $var\left(\sum_{i=1}^n X_{i}\right) = \sum_{i=1}^{n} var(X_{i}) + 2\sum_{i,j:i<j}^{n} cov(X_{i},X_{j})$ (Figure 1C). Our previous work has shown that this effect is important in single cell pathway activation dynamics `r citep("doi.org/10.15252/msb.20177997")`.
+The specific requirements for coordinated protein expression of pathways or complexes can vary, with some requiring strict stoichiometric regulation and others having much more relaxed requirements. Strict stoichiometry scenarios require coordinated expression of proteins (Figure 1A, top), and others can have uncoordinated expression (Figure 1A bottom). At the single cell level, coordinated expression will result in a high correlation coefficient, whereas un-coordinated expression will result in a low correlation coefficient (Figure 1B). Even when the expression variation (standard deviation or coefficient of variation) and abundances are identical between these two scenarios, the total variance of a pathway or complex can be significantly different due to the variance sum law: $var\left(\sum_{i=1}^n X_{i}\right) = \sum_{i=1}^{n} var(X_{i}) + 2\sum_{i,j:i<j}^{n} cov(X_{i},X_{j})$ (Figure 1C). The nature of these two sources of variation that contribute to the variance sum law can have very different impacts on the behavior of systems. This means that for a given pathway with fixed total variance, the variance and correlation of the members of that system can be changed and the behavior can be impacted (needs big time re-wording, and first figure should show this...). Our previous work has shown that this effect is important in single cell pathway activation dynamics `r citep("doi.org/10.15252/msb.20177997")`.
 
 In order to study the relationship between protein expression variance and co-expression (correlated expression) of cellular pathways and complexes at the proteome level, we utilized *Xenopus laevis* eggs as a single cell model. Activated *Xenopus laevis* eggs were collected at 5 time points across the first cell cycle (0, 20, 40, 60, and 80 minutes), with 5 eggs at each time point (Fig 1D). Using TMT multiplexing and mass spectrometry, we were able to determine the relative abundance of more than 1300 proteins in single cells. Expression of these proteins across the time course of the cell cycle showed no dynamic patterns, revealing that these highly expressed proteins are likely not regulated by cell cycle processes. Additionally, a PCA analysis of these eggs showed no discernible clustering on cell cycle time (Fig S2).
 
-To determine the expression variability for the measured proteins between single cells, we calculated the variance and coefficient of variation (CV) across all samples. This showed a wide range of variation containing multiple distributions (Fig 1E), many of which are consistent with our previous study of variation using targeted mass spectrometry (Fig S2). An added benefit to measuring these proteins in parallel is that we are able to calculate coordinated expression of protein pairs at single cell resolution. Using the Pearson correlation coefficient, we were able to determine the coordinated expression of nearly 2 million protein pairs (Fig 1F-G). The distribution of correlation coefficients fit a normal distribution centered around 0, with the majority of protein pairs appearing to not show significant co-regulation. However, there appear to be a significant number of protein pairs containing high correlation coefficients, and a clustered heat map shows that many highly co-regulated pairs cluster together (Fig 1G).
+To determine the expression variability for the measured proteins between single cells, we calculated the variance and coefficient of variation (CV) across all samples. This showed a wide range of variation containing multiple distributions (Fig SXX), many of which are consistent with our previous study of variation using targeted mass spectrometry (Fig SXX). An added benefit to measuring these proteins in parallel is that we are able to calculate coordinated expression of protein pairs at single cell resolution. Using the Pearson correlation coefficient, we were able to determine the coordinated expression of nearly 2 million protein pairs (Fig SXX). The distribution of correlation coefficients fit a normal distribution centered around 0, with the majority of protein pairs appearing to not show significant co-regulation. However, there appear to be a significant number of protein pairs containing high correlation coefficients, and a clustered heat map shows that many highly co-regulated pairs cluster together (Fig SXX).
+
+In order to study how protein expression variation, co-expression, and total variance are related in protein modules, we utilized the KEGG ID and GO Term databases to categorize the proteins into modules (Fig 1E). For each module the coefficient of variance and pairwise correlation coefficients for the proteins were used to calculate the normalized total variance of the module.
 
 
 ## Variance sum law reveals modules that utilize a trade-off between protein co-expression and noise
 
-Multicomponent modules such as heteromeric protein complexes and metabolic and signaling pathways have a certain tolerance for noise. Two components of the noise of these systems are the expression variance of the individual proteins, as well as the correlation or co-variance of expression between the proteins. This means that if a group of proteins have a positive correlation, then the total variance will be higher than if there was no correlation. This single cell proteomics data set gave us an excellent opportunity to see how variance and co-expression of proteins are related in low variance and high variance modules. The total variance of a module can be calculated using the variance sum law, where for a group of proteins $X_{1},\dotsc,X_{n}$, the total variance of the group is:
+Multicomponent modules such as heteromeric protein complexes and metabolic and signaling pathways have a certain tolerance for noise. Two components of the noise of these systems are the expression variance of the individual proteins, as well as the correlation of expression between the proteins. This means that if a group of proteins have a positive correlation, then the total variance will be higher than if there was no correlation. This single cell proteomics data set gave us an excellent opportunity to see how variance and co-expression of proteins are related in low variance and high variance modules. The total variance of a module can be calculated using the variance sum law, where for a group of proteins $X_{1},\dotsc,X_{n}$, the total variance of the group is:
 $$\sigma_{{}_{total}}^2 = \sum_{i=1}^{n} \sigma_{X_{i}}^2 + 2\sum_{i,j:i<j}^{n} \rho(X_{i},X_{j})\sigma_{X_i}\sigma_{X_j}$$
 
-To categorize the measured protein expression data into modules, we utilized GO term and KEGG pathway annotations. Since pathways and complexes have varying numbers of proteins, and the number of proteins in a module is highly influential on the total variance sum, we normalized the total variance sum by the number of components (Fig. xA and xB) to eliminate this confounding dependency. With the normalized total variance metric, we could separate modules into high and low variance categories (Fig 2A). Since co-expression of proteins (positive correlation between protein expression) increases the total variance, we expected to see the high variance modules to be enriched for high levels of both protein expression variance and co-expression (Fig 1B and 1C, red). However, we were surprised to see that the low variance modules were also enriched for high levels of co-expression of proteins, with some of the mean correlation coefficients of modules as high as those in the high variance category (Fig 1B, orange shaded region).
+To categorize the measured protein expression data into modules, we utilized GO term and KEGG pathway annotations. Since pathways and complexes have varying numbers of proteins, and the number of proteins in a module is highly influential on the total variance sum, we normalized the total variance sum by the number of components (Fig. xA and xB) to eliminate this confounding dependency. With the normalized total variance metric, we could separate modules into high and low variance categories (Fig 2A). Since co-expression of proteins (positive correlation between protein expression) increases the total variance, we expected to see the high variance modules to be enriched for high levels of both protein expression variance and co-expression (Fig 1B and 1C, red). However, we were surprised to see that the low variance modules were also enriched for high levels of co-expression of proteins, with some of the mean correlation coefficients of modules as high as those in the high variance category (Fig 2B).
 
 We wondered how these protein modules dealt with the increased variance load caused by the high numbers of correlated proteins, so we looked at the pairwise relationship between the mean variance of the modules and the mean correlation coefficients (Fig 2D and S1). The low variance modules uniquely showed a significant negative correlation (R = 0.49) between these two metrics, showing that for modules that enforce a low level of total variance, co-expression of proteins within that module is offset by lower expression variance.
 
 ## Enforcement of a trade-off between protein co-expression and noise increases efficiency of heteromeric protein complexes and metabolic pathways
 
-Interestingly, we saw the low total variance and high coordinated expression sub population contained many metabolic pathways as well as multisubunit complexes, while the high total variance and high coordinated expression sub-population contained many signalling pathways (Fig. 2D, Fig. 3E-H). Previous studies have shown that protein complex components are produced stoichiometricly `r citep("doi.org/10.1016/j.cels.2018.11.003")` across eukaryotic species and that co-expression of pathway specific enzymes are tightly regulated post-transcriptionally across species `r citep("doi.org/10.1016/j.cell.2018.03.007")`. This led us to wondered what the implications were for the synergy of maintaing low total variance with high levels of co-expression of the members of protein complexes and metabolic pathways.
+Interestingly, we saw the low total variance and high coordinated expression sub population contained many metabolic pathways as well as multisubunit complexes, while the high total variance and high coordinated expression sub-population contained many signalling pathways (Fig. 2D, Fig. 3E-H). Previous studies have shown that protein complex components are produced stoichiometricly `r citep("doi.org/10.1016/j.cels.2018.11.003")` across eukaryotic species and that co-expression of pathway specific enzymes are tightly regulated post-transcriptionally across species `r citep("doi.org/10.1016/j.cell.2018.03.007")`. This led us to wonder what the implications were for the synergy of maintaing low total variance with high levels of co-expression of the members of protein complexes and metabolic pathways.
 
 To test why complexes observed in our data set and others, (i.e. core members of the ribosome (Fig 4A)), coordinate co-expression and expression variation, we imagined an idealized 10 member heteromeric complex (Fig 4B). Coordinated expression could allow for tight control of the total number of assembled complexes. However, this on it's own is not sufficient since high levels of individual protein variance would result in an increased number of partially assembled complexes. In this idealized complex, we titrated the correlation coefficients between all 10 members along with the individual expression variation and saw that increased correlations and decreasing variance had a synergistic effect in allowing for the control of the total number of fully assembled complexes (Fig 4C.). Additionally, there is a large regime with high correlations and low variation that allow for low total variance of the system.
 
@@ -360,12 +400,12 @@ We also observed a number of metabolic pathways that had similar variation and c
 
 ## Discussion
 
-\newpage
+#\newpage
 
 # Figures
 
-```{r figure_1, echo=FALSE, fig.height=4.5, fig.width=6, message=FALSE, warning=FALSE, fig.cap=fig_legend_1}
-allGroups <- readRDS("allGroups.RDS")
+```{r figure_1, echo=FALSE, fig.height=9, fig.width=8.5, message=FALSE, warning=FALSE, fig.cap=fig_legend_1}
+#allGroups <- readRDS("allGroups.RDS")
 
 set.seed(41)
 
@@ -385,7 +425,7 @@ p1 <- rbind(low_cor, high_cor) %>% pivot_longer(ProtA:ProtB, names_to = "protein
   facet_wrap(~cor, ncol = 1) +
   scale_color_manual(values = c("#d53e4f","#3288bd")) +
   theme_minimal() +
-  theme(legend.position = "none")
+  theme(legend.position = "bottom")
 
 p2 <- rbind(low_cor, high_cor) %>% pivot_longer(ProtA:ProtB, names_to = "protein", values_to = "abundance") %>%
   ggplot(., aes(x = protein, y = abundance, color = protein)) + 
@@ -448,17 +488,264 @@ bottom <- p8 + p5 + p6 + p7 + plot_layout(nrow = 1,
                                           widths = c(2,1,1,3),
                                 heights = c(2,1,1,2))
 
-top / bottom + plot_layout(nrow = 2,
-                           heights = c(1,0.8)) +
-  plot_annotation(tag_levels = "A")
+# top / bottom + plot_layout(nrow = 2,
+#                            heights = c(1,0.8)) +
+#   plot_annotation(tag_levels = "A")
 
-fig_legend_1 <- c("A) Simulated expression of two proteins over time in a single cell with a mean of 100 and a standard deviation of 30 with expression correlations of 0 and 0.8. B) Pairwise plots of the two proteins in the single cells between uncorrelated and correlated scenarios. C) The total variance between the uncorrelated and correlated scenarios from A and B. D) To measure protein expression variance and coordinated expression, 25 eggs at 5 time points during the first cell cycle were analyzed with multiplexed shotgun mass spectrometry. E) Histogram of the coefficient of variation of all measured proteins. F) Histogram of the pairwise correlation coefficients between all measured proteins. G) Heat-map of the pairwise correlation coefficients between all measured protein pairs.")
+cowplot::ggdraw() + cowplot::draw_image(magick::image_read_pdf("../images/Fig_1_new.pdf"))
+
+fig_legend_1 <- c("Single cell approach to study expression variation and correlation at a proteomic scale: A) Simulated expression of two proteins over time in a single cell with means and standard deviations of 100 and 30 respectively and correlations of 0 and 0.8. B) Pairwise plots of the two proteins in the single cells between uncorrelated and correlated scenarios. C) The total variance between the uncorrelated and correlated scenarios from A and B. D) To measure protein expression variance and coordinated expression, 25 eggs at 5 time points during the first cell cycle were analyzed with multiplexed shotgun mass spectrometry. E) Proteins were grouped by KEGG IDs and GO terms. The expression variation and pairwise correlation coefficients were calculated for all proteins within each group (4 of 1225 shown) which were then used to calcuate the normalized total variance of each group.")
 
 ```
 
 \newpage
 
-```{r figure_2, echo=FALSE, fig.height=7, fig.width=6, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_2}
+# New Figure 1 sub-plots
+```{r eval=FALSE, include=FALSE}
+#hm_groups <- c("03010","00030","GO:0046496","00071","GO:0006096")
+hm_groups <- c("GO:0015934", "04012", "GO:0007264", "GO:0010608", "GO:0031329", "GO:0000786", "00030")
+#hm_groups <- allGroups$accession
+
+rm(prot_hm)
+for(i in seq_along(hm_groups)){
+  if(!exists("prot_hm")){
+    temp_prots <- allGroups %>% 
+      filter(accession == hm_groups[i]) %>% 
+      pull(Uniprot) %>% unlist()
+    
+    prot_hm <- protImpute %>% 
+      filter(Uniprot %in% temp_prots) %>% 
+      select(-Uniprot) %>%
+      as.matrix()
+    
+    Group <- rep(filter(allGroups, 
+                        accession == hm_groups[i])$name,
+                 times = length(temp_prots))
+    
+    mat_labels <- temp_prots
+  } else{
+    temp_prots <- allGroups %>% 
+      filter(accession == hm_groups[i]) %>% 
+      pull(Uniprot) %>% unlist()
+    
+    temp_prot_hm <- protImpute %>% 
+      filter(Uniprot %in% temp_prots) %>% 
+      select(-Uniprot) %>%
+      as.matrix()
+    
+    prot_hm <- rbind(prot_hm, temp_prot_hm)
+    
+    Group <- append(Group,
+                    rep(filter(allGroups, 
+                        accession == hm_groups[i])$name,
+                 times = length(temp_prots)),
+                 after = length(Group))
+    
+    mat_labels <- append(mat_labels, temp_prots, after = length(mat_labels))
+  }
+}
+mat_labels <- mapIds(org.Xl.eg.db, 
+       keys = mat_labels, 
+       keytype = 'UNIPROT', 
+       column = 'SYMBOL')
+
+rownames(prot_hm) = mat_labels
+
+df <- tibble(run = rep(LETTERS[1:5], each = 5), 
+  minutes = as.character(rep(seq(0,80,20), times = 5))) %>%
+  unite(run,minutes, col = "x")
+
+col <- c(brewer.pal(6,"Blues")[2:6],
+         brewer.pal(6,"Greens")[2:6],
+         brewer.pal(6,"Oranges")[2:6],
+         brewer.pal(6,"Purples")[2:6],
+         brewer.pal(6,"Reds")[2:6])
+names(col) <- df$x
+
+column_ha <- HeatmapAnnotation(
+  sample = df$x,
+  col = list(sample = col)
+)
+
+# column_ha = HeatmapAnnotation(
+#   run = rep(LETTERS[1:5], each = 5), 
+#   minutes = as.character(rep(seq(0,80,20), times = 5)),
+#   col = list(
+#     run = c("A" = "#e41a1c", "B" = "#377eb8", "C" = "#4daf4a", "D" = "#984ea3", "E" = "#ff7f00"),
+#     minutes = c("0" = "#ffffcc", "20" = "#a1dab4", "40" = "#41b6c4", "60" = "#2c7fb8", "80" = "#253494")
+#   )
+# )
+row_ha = rowAnnotation(Group = Group)
+Heatmap(
+  log2(prot_hm),
+  name = "log2()",
+  #border = "black",
+  col = colorRamp2(seq(-3,3,0.01), rev(colorRampPalette(brewer.pal(11, 'RdBu'))(601))),
+  #col = wesanderson::wes_palette("Zissou1", 100, type = "continuous"),
+  top_annotation = column_ha,
+  right_annotation = row_ha,
+  cluster_columns = FALSE,
+  cluster_rows = FALSE,
+  show_column_names = FALSE,
+  row_names_side = "left",
+  row_names_gp = gpar(fontsize = 7)
+)
+
+df <- prot_hm %>% as_tibble %>% cbind(Group, .) %>% as_tibble() %>%
+  mutate(Prot = as.factor(rownames(prot_hm))) %>%
+  group_by(Group) %>% 
+  #mutate(Prot = 1:n()) %>% 
+  select(Group, Prot, everything()) %>%
+  ungroup() %>%
+  pivot_longer(3:ncol(.), names_to = "cell", values_to = "abundance")
+  
+ggplot(df, aes(x = log2(abundance), y = as.factor(Prot), fill = Group)) + 
+  ggridges::geom_density_ridges(scale = 2, size = 0.1) +
+  facet_wrap(~Group, scales = "free_y", ncol = 1) +
+  xlim(-1,1) +
+  theme_minimal() +
+  theme(legend.position = "none",
+        axis.title.y=element_blank(),
+        #axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        text = element_text(size = 8))
+
+df %>% group_by(Group, Prot) %>%
+  summarise(mean = mean(abundance),
+            sd = sd(abundance),
+            cv = sd / mean) %>%
+  #mutate(order = rank(sd)) %>%
+  ggplot(., aes(x = fct_reorder(Prot, rank(cv)), y = cv, fill = Group)) +
+  geom_bar(stat = "identity") + 
+  geom_hline(yintercept = median(allGroups$medCV), linetype = "dashed") +
+  facet_wrap(~Group, scales = "free_y", ncol = 1) +
+  theme_minimal() +
+  theme(legend.position = "none",
+         axis.title.y=element_blank(),
+        text = element_text(size = 8)) +
+  coord_flip()
+
+test_prots <- allGroups %>% filter(accession == hm_groups[7]) %>% pull(Uniprot) %>% unlist()
+test_cor_hm <- cor[test_prots, test_prots]
+test_prots <- mapIds(org.Xl.eg.db, 
+       keys = test_prots, 
+       keytype = 'UNIPROT', 
+       column = 'SYMBOL')
+rownames(test_cor_hm) = test_prots
+colnames(test_cor_hm) = test_prots
+
+Heatmap(test_cor_hm,
+        col = colorRamp2(seq(-1,1,0.01), rev(colorRampPalette(brewer.pal(11, 'RdBu'))(201))),
+        show_row_names = TRUE,
+        show_column_names = TRUE,
+        show_heatmap_legend = FALSE,
+        show_column_dend = TRUE,
+        show_row_dend = TRUE)
+
+allGroups %>% filter(accession %in% hm_groups) %>% 
+  ggplot(., aes(x = fct_reorder(name, -medCV), y = medCV, fill = name)) + 
+  geom_bar(stat = "identity") +
+  geom_hline(yintercept = median(allGroups$medCV), linetype = "dashed") +
+  coord_flip() +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+allGroups %>% filter(accession %in% hm_groups) %>% 
+  ggplot(., aes(x = fct_reorder(name, medCors), y = medCors, fill = name)) + 
+  geom_bar(stat = "identity") +
+  geom_hline(yintercept = median(allGroups$medCors), linetype = "dashed") +
+  coord_flip() +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Histogram w/ variance groups of interest
+allGroups %>% 
+  ggplot(., aes(x = medCV)) +
+  geom_histogram(bins = 50) +
+  geom_histogram(data = filter(allGroups,
+                               accession %in% hm_groups),
+                 aes(x = medCV, fill = name),
+                 bins = 50) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+allGroups %>% 
+  ggplot(., aes(x = medCors)) +
+  geom_histogram(bins = 50) +
+  geom_histogram(data = filter(allGroups,
+                               accession %in% hm_groups),
+                 aes(x = medCors, fill = name),
+                 bins = 50) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+# Gini Analysis
+
+Goal: do a positive and negatvie correlation Gini analysis. Since this analysis only works with positive values, and because 
+
+```{r}
+library(diptest)
+
+for(i in seq_along(hm_groups)){
+  test_prots <- allGroups %>% 
+    filter(accession == hm_groups[i]) %>% 
+    pull(Uniprot) %>% 
+    unlist()
+  
+  test_cor_hm <- cor[test_prots, test_prots]
+  
+  print(dip.test(test_cor_hm[lower.tri(test_cor_hm)])$p.value)
+}
+
+test_prots <- allGroups %>% 
+  filter(accession == hm_groups[8]) %>% pull(Uniprot) %>% unlist()
+
+test_cor_hm <- cor[test_prots, test_prots]
+
+Heatmap(test_cor_hm,
+        col = colorRamp2(seq(-1,1,0.01), 
+                         rev(colorRampPalette(brewer.pal(11, 'RdBu'))(201))),
+        show_row_names = FALSE,
+        show_column_names = FALSE,
+        show_heatmap_legend = FALSE,
+        show_column_dend = FALSE,
+        show_row_dend = FALSE)
+
+
+ggplot(allGroups, aes(x = medCV, y = sdCV)) + 
+  geom_point(alpha = 0.5, color = "grey") +
+  geom_point(data = filter(allGroups, accession %in% hm_groups),
+             color = "orange",
+             size = 2) +
+  geom_text_repel(data = filter(allGroups, accession %in% hm_groups),
+                  aes(label = name),
+                  force = 10,
+                  box.padding = 1) +
+  theme_minimal()
+
+#### KEGG
+  data <- kegg_genes %>% filter(kegg_pathway %in% pathway) %>%
+    left_join(joined_wat_results, by = 'ext_gene') %>%
+    filter(lrt_qval < 0.05)
+  
+  genes <- as.vector(log2(data$fc))
+  names(genes) <- data$entrez_id
+  pv.out <- pathview(genes, 
+                     pathway.id = pathway, 
+                     species = 'mmu', 
+                     same.layer = F,
+                     low = list(gene = 'blue'),
+                     mid = list(gene = 'transparent'),
+                     high = list(gene = 'red'),
+                     limit = list(gene = c(-2,2))
+                     )
+  
+
+```
+
+
+```{r figure_2, echo=FALSE, fig.height=9, fig.width=8.5, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_2}
 p1 <- ggplot(allGroups, aes(x = normVar, fill = interval)) + 
   geom_histogram(data = filter(allGroups, interval == "mid"),bins = 50) + 
   geom_histogram(data = filter(allGroups, interval == "low"),bins = 50) + 
@@ -470,24 +757,27 @@ p1 <- ggplot(allGroups, aes(x = normVar, fill = interval)) +
 
 interesting_groups_low <- c("03010","00030","GO:0046496","00071",
                             "GO:0006096","GO:0015934","GO:0019843",
-                            "00051","GO:0042555","04012")
+                            "00051","GO:0042555","04012","GO:0006098")
 
 interesting_groups_high <- c("GO:0042995","03008","GO:0007264","GO:0005885",
                              "GO:0007166","04150","GO:0035556","GO:0016791","GO:0007165")
 
 interesting_groups <- c(interesting_groups_low, interesting_groups_high)
 
-p2 <- ggplot(filter(allGroups, n > 5), aes(x = medCors, y = medCV, color = interval, shape = type)) +
-  geom_point(data = filter(allGroups, interval == "mid", n > 4),
+p2 <- ggplot(filter(allGroups, n > 3), aes(x = medCors, y = medCV, color = interval, shape = type)) +
+  geom_point(data = filter(allGroups, interval == "mid", n > 3),
              size = 2, alpha = 0.5, stroke = 0) +
-  geom_point(data = filter(allGroups, interval != "mid", n > 4),
+  geom_point(data = filter(allGroups, interval != "mid", n > 3),
              size = 3, alpha = 0.75, stroke = 0) +
-  geom_label_repel(data = filter(allGroups, accession %in% interesting_groups),
-                  aes(label = name),
-                  colour = 'black',
-                  size = 1.5,
-                  force = 5,
-                  box.padding = 1) +
+  geom_label_repel(
+    data = filter(allGroups, accession %in% interesting_groups),
+    #data = filter(allGroups, medCors > 0.15, interval != "mid", n > 4),
+    aes(label = name),
+    colour = 'black',
+    size = 1.5,
+    force = 5,
+    box.padding = 1
+  ) +
   #coord_cartesian(ylim=c(-10,10)) +
   theme_minimal() +
   theme(legend.position = "bottom") +
@@ -507,7 +797,8 @@ p3 <- ggplot(allGroups, aes(x = medCors, fill = interval)) +
         axis.title.x=element_blank(),
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank()) +
-  xlim(-0.15,0.5)
+  xlim(-0.15,0.5) +
+  ylab("Density")
 
 p4 <- ggplot(allGroups, aes(x = medCV, fill = interval)) +
   geom_density(alpha = 0.75, color = NA) +
@@ -517,7 +808,28 @@ p4 <- ggplot(allGroups, aes(x = medCV, fill = interval)) +
         axis.title.y=element_blank(),
         axis.text.y=element_blank(),
         axis.ticks.y=element_blank()) +
-  xlim(0.08,0.32)
+  xlim(0.08,0.32) +
+  ylab("Density")
+
+
+plots <- 5:8
+for(i in 1:length(plots)){
+  assign(paste0("p",plots[i]), cor_rug_plot(interesting_groups_low[i], "#3288bd"))
+}
+
+plots <- 9:12
+for(i in 1:length(plots)){
+  assign(paste0("p",plots[i]), cor_rug_plot(interesting_groups_high[i], "#d53e4f"))
+}
+
+left <- p5 + p6 + p7 + p8 + plot_layout(nrow = 1)
+
+right <- p9 + p10 + p11 + p12 + plot_layout(nrow = 1)
+
+bottom <- wrap_plots(left, right) + 
+  plot_annotation(tag_levels = "A") + 
+  plot_layout(nrow = 2)
+
 
 # p5 <- rbind(mutate(allGroups, interval = "mid", name = "all"),
 #       filter(allGroups, accession %in% interesting_groups)) %>%
@@ -538,34 +850,20 @@ p4 <- ggplot(allGroups, aes(x = medCV, fill = interval)) +
 # wrap_plots(left, p2) + plot_layout(widths = c(1,3)) +
 #   plot_annotation(tag_levels = "A")
 
-p3 + plot_spacer() + p2 + (p4 + coord_flip()) +
+mid <- p3 + plot_spacer() + p2 + (p4 + coord_flip()) +
   plot_layout(widths = c(4,1),
               heights = c(1,4))
+p1 / mid / bottom +
+  plot_layout(heights = c(0.5,4,3)) +
+  plot_annotation(tag_levels = "A")
 
-fig_legend_2 <- c("A) Histogram of the normalized variation values across all of the GO terms and KEGG pathways. The bottom and top ~15% are colored blue and red respectively. B) Distributions of the mean correlation coefficient across all groups of proteins. Both the top and bottom 15% of normalized variation groups had peaks of high levels of mean correlation coefficients. C) Distributions of the mean coefficient of variation across all groups of proteins. The top and bottom ~15% of normalized variation groups were largely separated. D) Pairwise plot between the mean correlation and mean coefficient of variation within each GO term and KEGG pathway with color coding from A. Interestingly, both the top and bottom 10% of normalized variation have groups of proteins with high levels of correlation, despite high correlation adding to total variance. In the lowest 10% of normalized variation groups there appears to be a negative correlation between mean correlation and variation.")
+fig_legend_2 <- c("Tradeoff between expression variation and co-expression in low variation modules: A) Histogram of the normalized variation values across all of the GO terms and KEGG pathways. The bottom and top ~15% are colored blue and red respectively. B) Distributions of the mean correlation coefficient across all groups of proteins. Both the top and bottom 15% of normalized variation groups had peaks of high levels of mean correlation coefficients. C) Pairwise plot between the mean correlation and mean coefficient of variation within each GO term and KEGG pathway with color coding from A. Interestingly, both the top and bottom 10% of normalized variation have groups of proteins with high levels of correlation, despite high correlation adding to total variance. In the lowest 10% of normalized variation groups there appears to be a negative correlation between mean correlation and variation. D) Distributions of the mean coefficient of variation across all groups of proteins. The top and bottom ~15% of normalized variation groups were largely separated. E:L) Density plots of correlation coefficients select protein groups color coded by low (blue) and high (red) normalized protein variance, with the distribution of all measured correlation coefficients colored in grey (rug plot to show the measured correlations coefficients shown on plot). Below each density plot is a box plot.")
 
 ```
 
-\newpage
 
-```{r figure_3, echo=FALSE, fig.height=4, fig.width=7, message=FALSE, warning=FALSE, eval=TRUE, fig.cap=fig_legend_3}
-plots <- 1:4
-for(i in 1:length(plots)){
-  assign(paste0("p",plots[i]), cor_rug_plot(interesting_groups_low[i], "#3288bd"))
-}
+```{r figure_3, echo=FALSE, fig.height=4, fig.width=7, message=FALSE, warning=FALSE, eval=FALSE, fig.cap=fig_legend_3}
 
-plots <- 5:8
-for(i in 1:length(plots)){
-  assign(paste0("p",plots[i]), cor_rug_plot(interesting_groups_high[i], "#d53e4f"))
-}
-
-left <- p1 + p2 + p3 + p4 + plot_layout(nrow = 1)
-
-right <- p5 + p6 + p7 + p8 + plot_layout(nrow = 1)
-
-wrap_plots(left, right) + 
-  plot_annotation(tag_levels = "A") + 
-  plot_layout(nrow = 2)
 
 fig_legend_3 <- c("Density plots of correlation coefficients select protein groups color coded by low (blue) and high (red) normalized protein variance, with the distribution of all measured correlation coefficients colored in grey (rug plot to show the measured correlations coefficients shown on plot). Below each density plot is a box plot.")
 ```
@@ -669,7 +967,7 @@ bottom <- p2 + p3 + plot_layout(widths = c(1,2))
   plot_annotation(tag_levels = "A")
 
 
-fig_legend_4 <- c("A) A representative heat-map of one of the low normalized variation groups with high levels of correlated proteins (Large ribosomal subunit). B) A simple model showing the percent of potentially assembled subunits of an idealized heteromeric 10 subunit complex. Both the variation of expression between the subunits as well as the coordinated expression between them can effect the percent of maximum assembled complexes. C) Heat-map showing the total variance as a function of coefficient of variation and correlation from the idealized model in B).")
+fig_legend_4 <- c("Co-expression and low variance leads to better control of assembled heteromeric protein complexes: A) A representative heat-map of one of the low normalized variation groups with high levels of correlated proteins (Large ribosomal subunit). B) A simple model showing the percent of potentially assembled subunits of an idealized heteromeric 10 subunit complex. Both the variation of expression between the subunits as well as the coordinated expression between them can effect the percent of maximum assembled complexes. C) Heat-map showing the total variance as a function of coefficient of variation and correlation from the idealized model in B).")
 ```
 
 \newpage
@@ -693,6 +991,17 @@ sup_fig_legend_1 <- c("Pairwise plots of the mean correlation coefficient and me
 
 \newpage
 
+```{r}
+pca = prcomp(log2(protImpute[,2:ncol(protImpute)]))
+
+pcaDF = tibble(cell = rownames(pca$rotation), PC1 = pca$rotation[,1], PC2 = pca$rotation[,2])
+pcaDF = pcaDF %>% separate(cell, into = c('run','label',"time"), remove = F)
+ggplot(pcaDF, aes(x = PC1, y = PC2, colour = time)) + geom_point(size = 5) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+
 # Methods
 
 ## Collection and activation of Xenopus laevis eggs:
@@ -701,7 +1010,7 @@ Xenopus egg extracts were prepared based on modifications of a previous protocol
 
 ## Sample preparation for mass spectrometry:
 
-Single eggs were lysed mechanically by pipetting the egg in 100$\mu$L of lysis buffer (100 mM NaCl, 25 mM Tris pH 8.2, Complete EDTA- free protease inhibitor cocktail (Sigma). The lysate was then placed in a 400 uLnatural polyethylene micro-centrifuge tube (E&K
+Single eggs were lysed mechanically by pipetting the egg in 100$\mu$L of lysis buffer (100 mM NaCl, 25 mM Tris pH 8.2, Complete EDTA- free protease inhibitor cocktail (Sigma). The lysate was then placed in a 400 uL natural polyethylene micro-centrifuge tube (E&K
 Scientific #485050) and spun at 15,000 g in a right angle centrifuge (Beckman Microfuge E) at 4°C for 5 min. The lipid layer was removed by using a razor blade to cut the tube off just beneath it, and the cytoplasmic fraction was pipetted into a 1.5-ml protein LoBind tube (Fisher Scientific #13-698-794), being careful to leave the yolk behind. To precipitate the proteins from the cytoplasmic fraction, 1 ml of ice cold acetone was added to each sample and placed at 20°C overnight. To collect precipitated proteins, the samples were centrifuged at
 18,000 g for 20 min at 4°C. Acetone was decanted, and the protein pellets were resolubilized in 25$\mu$L of 8 M urea. To fully solubilize the protein pellet, the samples were placed in a shaker for 1 h at room temperature. The samples were then diluted to 2 M urea with 50 mM ammonium bicarbonate to a 100$\mu$L volume, after which protein concentration was measured in duplicate with a BCA assay by taking two 10$\mu$L aliquots of each sample. The proteins in the remaining 80$\mu$L of sample volume were reduced with 10 mM TCEP and incubated for 30 min at 37°C, then alkylated with 15 mM iodoacetamide and incubated in the dark at room temperature. 
 
